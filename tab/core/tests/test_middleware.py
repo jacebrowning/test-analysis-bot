@@ -7,7 +7,6 @@ import pytest
 
 from tab.core.middleware import (
     CrawlerPreviewMiddleware,
-    DomainRedirectMiddleware,
     ExceptionLoggingMiddleware,
 )
 
@@ -58,37 +57,6 @@ def describe_exception_logging_middleware(expect):
 
         expect(log_message).contains("Traceback")
         expect(log_message).contains("RuntimeError")
-
-
-def describe_domain_redirect_middleware(expect):
-    @pytest.fixture
-    def middleware():
-        return DomainRedirectMiddleware(get_response=Mock())
-
-    @pytest.fixture
-    def http_request():
-        r = HttpRequest()
-        r.method = "GET"
-        r.path = "/test-path/"
-        r.get_host = Mock(return_value="test-analysis-bot.example.com")  # type: ignore[method-assign]
-        r.get_full_path = Mock(return_value="/test-path/")  # type: ignore[method-assign]
-        return r
-
-    def it_redirects_from_legacy_domain(mocker, middleware, http_request, settings):
-        settings.ALLOWED_HOSTS = [
-            "localhost",
-            "test-analysis-bot.example.com",
-        ]
-        mock_logger = mocker.patch("tab.core.middleware.log")
-        result = middleware.process_request(http_request)
-        expect(mock_logger.warning.called).is_(True)
-        call_args = mock_logger.warning.call_args
-        log_message = call_args[0][0]
-        expect(log_message).contains(
-            "Redirecting from test-analysis-bot.example.com/test-path/ to http://testserver.com/test-path/"
-        )
-        expect(result).is_not(None)
-        expect(result.status_code) == 301
 
 
 def _extract_og_tags(html: str) -> dict[str, str]:
