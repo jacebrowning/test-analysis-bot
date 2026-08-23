@@ -13,7 +13,6 @@ ALLOWED_HOSTS = [
     "0.0.0.0",
     "localhost",
     BASE_URL.removeprefix("https://"),
-    "test-analysis-bot.com",
 ]
 
 CSRF_TRUSTED_ORIGINS = [BASE_URL]

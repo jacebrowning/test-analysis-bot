@@ -2,13 +2,8 @@ import sys
 import time
 import traceback
 
-from django.conf import settings
 from django.contrib.auth import logout as auth_logout
-from django.http import (
-    HttpRequest,
-    HttpResponse,
-    HttpResponsePermanentRedirect,
-)
+from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.template.loader import render_to_string
 from django.utils.deprecation import MiddlewareMixin
@@ -80,29 +75,6 @@ class ExceptionLoggingMiddleware(MiddlewareMixin):
             f"Unhandled exception for {request.method} {request.path}\n{tb_text}",
             exc_info=False,  # Don't include exc_info since we're formatting it ourselves
         )
-
-        return None
-
-
-class DomainRedirectMiddleware(MiddlewareMixin):
-    """
-    Middleware to redirect from the legacy domain.
-    """
-
-    def process_request(self, request: HttpRequest) -> HttpResponse | None:
-        if not settings.ALLOWED_HOSTS:
-            return None
-
-        legacy_domain = settings.ALLOWED_HOSTS[-1]
-        if "test-analysis-bot" not in legacy_domain:
-            return None
-
-        request_host = request.get_host().split(":")[0]
-        if request_host == legacy_domain:
-            path = request.get_full_path()
-            redirect_url = f"{settings.BASE_URL}{path}"
-            log.warning(f"Redirecting from {request_host}{path} to {redirect_url}")
-            return HttpResponsePermanentRedirect(redirect_url)
 
         return None
 
