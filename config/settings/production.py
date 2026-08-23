@@ -24,12 +24,18 @@ CSRF_COOKIE_SECURE = True
 ###############################################################################
 # Caches
 
+REDIS_URL = os.environ["REDIS_URL"]
+
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": os.environ["REDIS_URL"],
+        "LOCATION": REDIS_URL,
     }
 }
+
+if REDIS_URL.startswith("rediss://"):
+    # Heroku Key-Value Store terminates TLS with a self-signed certificate
+    CACHES["default"]["OPTIONS"] = {"ssl_cert_reqs": None}
 
 ###############################################################################
 # Authentication

@@ -95,13 +95,6 @@ LOGGING: dict = {
             "filters": ["empty_log_filter"],
         },
     },
-    "loggers": {
-        "django.request": {
-            "handlers": [],
-            "level": "CRITICAL",
-            "propagate": False,
-        },
-    },
     "root": {
         "handlers": ["console"],
         "level": "INFO",
