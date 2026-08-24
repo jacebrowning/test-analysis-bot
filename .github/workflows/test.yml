@@ -1,0 +1,102 @@
+name: test
+
+on:
+  workflow_call:
+  pull_request:
+  push:
+    branches:
+      - main
+
+env:
+  TAB_API_URL: ${{ vars.TAB_API_URL }}
+  TAB_API_KEY: ${{ secrets.TAB_API_KEY }}
+  CI_COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+  CI_PR_NUMBER: ${{ github.event.pull_request.number }}
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+
+      - name: Install dependencies
+        uses: ./.github/actions/setup
+
+      - name: Check code
+        run: make check
+
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+
+      - name: Track setup
+        run: .github/workflows/lib/track-step.sh
+        env:
+          CI_STEP: setup
+          CI_SUITE: unit
+
+      - name: Install dependencies
+        uses: ./.github/actions/setup
+
+      - name: Run tests
+        run: |
+          make test-unit || true  # let TAB determine failure
+          .github/workflows/lib/upload-results.sh
+        env:
+          CI_SUITE: unit
+
+      - name: Track teardown
+        if: always()
+        run: .github/workflows/lib/track-step.sh
+        env:
+          CI_STEP: teardown
+          CI_SUITE: unit
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_analysis_bot_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+
+      - name: Track setup
+        run: .github/workflows/lib/track-step.sh
+        env:
+          CI_STEP: setup
+          CI_SUITE: integration
+
+      - name: Install dependencies
+        uses: ./.github/actions/setup
+
+      - name: Install browsers
+        run: poetry run playwright install chromium
+
+      - name: Run tests
+        run: |
+          make test-integration || true  # let TAB determine failure
+          .github/workflows/lib/upload-results.sh
+        env:
+          CI_SUITE: integration
+
+      - name: Track teardown
+        if: always()
+        run: .github/workflows/lib/track-step.sh
+        env:
+          CI_STEP: teardown
+          CI_SUITE: integration
