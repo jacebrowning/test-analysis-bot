@@ -1,0 +1,1 @@
+../../../docs/examples/junit/upload-results.sh
