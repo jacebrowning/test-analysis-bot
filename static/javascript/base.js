@@ -15,6 +15,23 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     document.addEventListener('click', function (e) {
+        const agentUrlBtn = e.target.closest('[data-copy-agent-url]');
+        if (agentUrlBtn) {
+            e.preventDefault();
+            const url = agentUrlBtn.getAttribute('data-copy-agent-url');
+            if (!url) {
+                return;
+            }
+            copyToClipboard(url);
+            const label = agentUrlBtn.firstChild;
+            const previousText = label.textContent;
+            label.textContent = 'Copied Agent URL';
+            setTimeout(function () {
+                label.textContent = previousText;
+            }, 1000);
+            return;
+        }
+
         const promptBtn = e.target.closest('[data-copy-prompt]');
         if (promptBtn) {
             if (promptBtn.disabled) {

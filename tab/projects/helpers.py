@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import json
+import secrets
+import string
+from datetime import timedelta
 from datetime import timezone as dt_timezone
 from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.cache import cache
+from django.http import HttpRequest
 from django.urls import reverse
 from django.utils import timezone as django_timezone
 
@@ -344,3 +349,29 @@ def build_metrics_json(project: Project, tests: list[Test], limit: int = 10) -> 
     }
 
     return json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+
+
+EXPORT_TOKEN_PARAM = "token"
+EXPORT_TOKEN_TIMEOUT = timedelta(days=7).total_seconds()
+_EXPORT_TOKEN_CACHE_PREFIX = "export:"
+_EXPORT_TOKEN_REQUEST_ATTR = "_export_token"
+
+
+def valid_export_token(token: str) -> bool:
+    return bool(token) and cache.get(_EXPORT_TOKEN_CACHE_PREFIX + token) is not None
+
+
+def tokenize(request: HttpRequest, path: str) -> str:
+    token = getattr(request, _EXPORT_TOKEN_REQUEST_ATTR, None) or request.GET.get(
+        EXPORT_TOKEN_PARAM
+    )
+    if not isinstance(token, str) or not valid_export_token(token):
+        token = _generate_export_token()
+    setattr(request, _EXPORT_TOKEN_REQUEST_ATTR, token)
+    return request.build_absolute_uri(f"{path}?{EXPORT_TOKEN_PARAM}={token}")
+
+
+def _generate_export_token() -> str:
+    token = "".join(secrets.choice(string.ascii_letters) for _ in range(8))
+    cache.set(_EXPORT_TOKEN_CACHE_PREFIX + token, True, timeout=EXPORT_TOKEN_TIMEOUT)
+    return token
