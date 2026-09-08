@@ -1,12 +1,22 @@
 from django.conf import settings
+from django.http import HttpRequest
 
 import log
 from ninja import ModelSchema, Schema
+from ninja.parser import Parser
 from ninja.security import APIKeyHeader
+from ninja.types import DictStrAny
 
 from tab.core.models import Organization
 from tab.projects.constants import DEFAULT_SUITE
 from tab.projects.models import Result
+
+
+class JSONOrFormParser(Parser):
+    def parse_body(self, request: HttpRequest) -> DictStrAny:
+        if "json" in (request.content_type or ""):
+            return super().parse_body(request)
+        return {key: request.POST[key] for key in request.POST}
 
 
 class ApiKey(APIKeyHeader):

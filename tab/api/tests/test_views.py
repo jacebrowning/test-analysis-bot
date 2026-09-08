@@ -193,8 +193,9 @@ def describe_share(expect, client):
             "commit": "abc123",
         }
 
+    @pytest.mark.parametrize("post", [post_json, post_form], ids=["json", "form"])
     @pytest.mark.django_db
-    def it_updates_status(payload, mocker):
+    def it_updates_status(payload, mocker, post):
         mock_github = mocker.patch("tab.core.models.Github")
         mock_repo = mock_github.return_value.get_repo.return_value
         mock_commit = mock_repo.get_commit.return_value
@@ -207,7 +208,7 @@ def describe_share(expect, client):
             repository_token="fake-token",
         )
 
-        response = post_json(client, url, payload)
+        response = post(client, url, payload)
 
         expect(response.status_code) == 200
         expect(response.json()) == {
@@ -231,12 +232,13 @@ def describe_share(expect, client):
             "my-user/my-project",
         ],
     )
+    @pytest.mark.parametrize("post", [post_json, post_form], ids=["json", "form"])
     @pytest.mark.django_db
-    def it_rejects_invalid_repositories(payload, project):
+    def it_rejects_invalid_repositories(payload, project, post):
         Organization.objects.create(name="MyOrganization", key="fake-api-key")
 
         payload["project"] = project
-        response = post_json(client, url, payload)
+        response = post(client, url, payload)
 
         expect(response.status_code) == 422
         expect(response.json()) == {

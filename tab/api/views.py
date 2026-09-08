@@ -20,6 +20,7 @@ from .schemas import (
     BulkResultRequest,
     BulkResultResponse,
     ErrorResponse,
+    JSONOrFormParser,
     ResultRequest,
     ResultResponse,
     ShareRequest,
@@ -34,6 +35,7 @@ api = NinjaAPI(
     title="Test Analysis Bot",
     version=project["version"],
     description=f"{project['description']} See the [README]({readme_url}) for examples.",
+    parser=JSONOrFormParser(),
 )
 api_key = ApiKey()
 
