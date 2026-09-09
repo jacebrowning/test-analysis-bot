@@ -1,11 +1,13 @@
 import time
 from enum import StrEnum
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth import BACKEND_SESSION_KEY
 from django.contrib.auth import logout as auth_logout
 from django.core.exceptions import SuspiciousOperation
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.module_loading import import_string
 
 import log
@@ -83,6 +85,9 @@ class AuthentikOIDCCallbackView(OIDCAuthenticationCallbackView):
         if "code" not in request.GET and "error" not in request.GET:
             raise SuspiciousOperation("OIDC callback has no result")
 
+        # Logging out flushes the session, so remember where the user was headed
+        self._login_next = request.session.get("oidc_login_next")
+
         state = request.GET.get("state")
         known_states = request.session.get("oidc_states")
         if (
@@ -109,6 +114,16 @@ class AuthentikOIDCCallbackView(OIDCAuthenticationCallbackView):
             log.warning("Authentik returned an invalid OIDC response")
             set_oidc_failure(request, OIDCFailureReason.INVALID_RESPONSE)
             return self.login_failure()
+
+    @property
+    def failure_url(self) -> str:
+        url = super().failure_url
+        next_url = getattr(self, "_login_next", None)
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url, allowed_hosts={self.request.get_host()}
+        ):
+            return f"{url}?{urlencode({'next': next_url})}"
+        return url
 
     def login_failure(self) -> HttpResponse:
         reason = self._failure_reason()
