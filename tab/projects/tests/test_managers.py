@@ -268,6 +268,94 @@ def describe_run_manager(expect):
             suite.refresh_from_db()
             expect(suite.average_setup_duration) == pytest.approx(12.0, abs=0.5)
             expect(suite.history.count()) == 1
+            history = suite.history.get()
+            expect(history.average_setup_duration) == pytest.approx(12.0, abs=0.5)
+            expect(history.average_tests_duration) == -1
+            expect(history.average_teardown_duration) == -1
+
+        @pytest.mark.django_db
+        def it_records_average_tests_duration_on_finish():
+            now = timezone.now()
+            Run.objects.track_step(
+                suite=suite,
+                branch="main",
+                commit="abc123",
+                step="setup",
+                metadata={},
+            )
+            run: Run = Run.objects.get(suite=suite, branch="main", commit="abc123")
+            run.setup_started_at = now - timedelta(seconds=50)
+            run.tests_started_at = now - timedelta(seconds=40)
+            run.save(update_fields=["setup_started_at", "tests_started_at"])
+
+            Run.objects.track_step(
+                suite=suite,
+                branch="main",
+                commit="abc123",
+                step="start",
+                metadata={},
+            )
+            Run.objects.track_step(
+                suite=suite,
+                branch="main",
+                commit="abc123",
+                step="finish",
+                metadata={},
+            )
+
+            history = suite.history.get()
+            expect(history.average_tests_duration) == pytest.approx(40.0, abs=0.5)
+            suite.refresh_from_db()
+            expect(suite.average_tests_duration) == pytest.approx(40.0, abs=0.5)
+
+        @pytest.mark.django_db
+        def it_records_average_teardown_duration_on_teardown():
+            now = timezone.now()
+            Run.objects.track_step(
+                suite=suite,
+                branch="main",
+                commit="abc123",
+                step="setup",
+                metadata={},
+            )
+            run: Run = Run.objects.get(suite=suite, branch="main", commit="abc123")
+            run.setup_started_at = now - timedelta(seconds=50)
+            run.save(update_fields=["setup_started_at"])
+
+            Run.objects.track_step(
+                suite=suite,
+                branch="main",
+                commit="abc123",
+                step="start",
+                metadata={},
+            )
+            run.refresh_from_db()
+            run.tests_started_at = now - timedelta(seconds=40)
+            run.save(update_fields=["tests_started_at"])
+
+            Run.objects.track_step(
+                suite=suite,
+                branch="main",
+                commit="abc123",
+                step="finish",
+                metadata={},
+            )
+            run.refresh_from_db()
+            run.tests_finished_at = now - timedelta(seconds=5)
+            run.save(update_fields=["tests_finished_at"])
+
+            Run.objects.track_step(
+                suite=suite,
+                branch="main",
+                commit="abc123",
+                step="teardown",
+                metadata={},
+            )
+
+            history = suite.history.get()
+            expect(history.average_teardown_duration) == pytest.approx(5.0, abs=0.5)
+            suite.refresh_from_db()
+            expect(suite.average_teardown_duration) == pytest.approx(5.0, abs=0.5)
 
         @pytest.mark.django_db
         def with_finish_step_adjusts_teardown_if_in_past():

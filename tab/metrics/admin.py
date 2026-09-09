@@ -52,6 +52,8 @@ class SuiteHistoryAdmin(admin.ModelAdmin):
         "suite__name",
         "run",
         "average_setup_duration",
+        "average_tests_duration",
+        "average_teardown_duration",
         "timestamp",
     )
     search_fields = (
@@ -66,6 +68,8 @@ class SuiteHistoryAdmin(admin.ModelAdmin):
     raw_id_fields = ("suite", "run")
     readonly_fields = (
         "average_setup_duration",
+        "average_tests_duration",
+        "average_teardown_duration",
         "timestamp",
     )
 

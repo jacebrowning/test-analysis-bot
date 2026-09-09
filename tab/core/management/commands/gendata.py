@@ -133,9 +133,15 @@ class Command(BaseCommand):
         self._generate_results(test, num_results, start, end)
         if suite:
             self._generate_runs(project, suite, num_results, start, end)
-            if suite.update_average_setup_duration():
-                suite.save(update_fields=["average_setup_duration", "updated_at"])
-                suite.history.create_from_suite(suite)
+            if suite.update():
+                suite.save(
+                    update_fields=[
+                        "average_setup_duration",
+                        "average_tests_duration",
+                        "average_teardown_duration",
+                        "updated_at",
+                    ]
+                )
         test.save()  # refresh last_result
         self._generate_history(test, days)
 
@@ -209,6 +215,9 @@ class Command(BaseCommand):
             fraction = (i + 0.5) / num_results
             tests_started_at = start + (end - start) * fraction
             setup_duration = round(random.uniform(8.0, 15.0), 2)
+            tests_duration = round(random.uniform(30.0, 90.0), 2)
+            teardown_duration = round(random.uniform(2.0, 8.0), 2)
+            tests_finished_at = tests_started_at + timedelta(seconds=tests_duration)
             runs.append(
                 Run(
                     project=project,
@@ -218,6 +227,9 @@ class Command(BaseCommand):
                     setup_started_at=tests_started_at
                     - timedelta(seconds=setup_duration),
                     tests_started_at=tests_started_at,
+                    tests_finished_at=tests_finished_at,
+                    teardown_finished_at=tests_finished_at
+                    + timedelta(seconds=teardown_duration),
                 )
             )
         Run.objects.bulk_create(runs)

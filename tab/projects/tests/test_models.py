@@ -70,6 +70,44 @@ def describe_suite(expect):
             expect(suite.update_average_setup_duration()) == True
             expect(suite.average_setup_duration) == 4.0
 
+    def describe_update_average_tests_duration(expect, project: Project):
+        @pytest.mark.django_db
+        def it_computes_average_tests_duration():
+            project.save()
+            suite: Suite = project.suites.create(name="my-suite")
+            now = timezone.now()
+            for seconds in (10, 20, 30):
+                suite.runs.create(
+                    project=project,
+                    branch="main",
+                    commit=f"commit{seconds}",
+                    tests_started_at=now - timedelta(seconds=seconds),
+                    tests_finished_at=now,
+                )
+
+            suite.average_tests_duration = -1
+            expect(suite.update_average_tests_duration()) == True
+            expect(suite.average_tests_duration) == 20.0
+
+    def describe_update_average_teardown_duration(expect, project: Project):
+        @pytest.mark.django_db
+        def it_computes_average_teardown_duration():
+            project.save()
+            suite: Suite = project.suites.create(name="my-suite")
+            now = timezone.now()
+            for seconds in (1, 2, 3):
+                suite.runs.create(
+                    project=project,
+                    branch="main",
+                    commit=f"commit{seconds}",
+                    tests_finished_at=now - timedelta(seconds=seconds),
+                    teardown_finished_at=now,
+                )
+
+            suite.average_teardown_duration = -1
+            expect(suite.update_average_teardown_duration()) == True
+            expect(suite.average_teardown_duration) == 2.0
+
 
 def describe_test(expect):
     @pytest.fixture

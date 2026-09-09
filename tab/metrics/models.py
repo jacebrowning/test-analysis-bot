@@ -85,6 +85,8 @@ class SuiteHistory(models.Model):
     )
 
     average_setup_duration = models.FloatField()
+    average_tests_duration = models.FloatField()
+    average_teardown_duration = models.FloatField()
     timestamp = models.DateTimeField(auto_now_add=True)
 
     objects: SuiteHistoryManager = SuiteHistoryManager()

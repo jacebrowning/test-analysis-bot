@@ -273,10 +273,21 @@ class RunManager(models.Manager):
             run.teardown_finished_at = now
         run.save()
 
-        if step == "start" and run.setup_duration > 0:
+        if (
+            (step == "start" and run.setup_duration > 0)
+            or (step == "finish" and run.tests_duration > 0)
+            or (step == "teardown" and run.teardown_duration > 0)
+        ):
             suite = run.suite
             if suite.update(run):
-                suite.save(update_fields=["average_setup_duration", "updated_at"])
+                suite.save(
+                    update_fields=[
+                        "average_setup_duration",
+                        "average_tests_duration",
+                        "average_teardown_duration",
+                        "updated_at",
+                    ]
+                )
 
         return run, created
 

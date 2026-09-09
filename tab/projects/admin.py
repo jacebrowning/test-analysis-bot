@@ -151,6 +151,8 @@ class SuiteAdmin(admin.ModelAdmin):
     readonly_fields = (
         "tests_count",
         "average_setup_duration",
+        "average_tests_duration",
+        "average_teardown_duration",
         "created_at",
         "updated_at",
     )
