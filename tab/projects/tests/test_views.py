@@ -3,6 +3,7 @@ from datetime import timedelta
 from datetime import timezone as dt_timezone
 
 from django.conf import settings
+from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
 
@@ -270,6 +271,42 @@ def describe_projects_index(expect, admin_client, organization: Organization):
         expect(response.status_code) == 200
         expect(html).contains("disabled-tests-btn")
         expect(html).contains("View Disabled Tests")
+
+    @pytest.mark.django_db
+    def it_lists_projects_for_an_exact_email_address(client):
+        Organization.objects.create(
+            name="Personal",
+            email_domain="jacebrowning@gmail.com",
+            repository_index="https://github.com/jacebrowning",
+        )
+        Project.objects.create(
+            repository="https://github.com/jacebrowning/test-analysis-bot"
+        )
+        user = User.objects.create_user(username="jace", email="jacebrowning@gmail.com")
+        client.force_login(user)
+
+        response = client.get(index_url)
+        html = response.content.decode("utf-8")
+        expect(response.status_code) == 200
+        expect(html).contains("jacebrowning › test-analysis-bot")
+
+    @pytest.mark.django_db
+    def it_hides_projects_from_other_addresses_on_the_same_consumer_domain(client):
+        Organization.objects.create(
+            name="Personal",
+            email_domain="jacebrowning@gmail.com",
+            repository_index="https://github.com/jacebrowning",
+        )
+        Project.objects.create(
+            repository="https://github.com/jacebrowning/test-analysis-bot"
+        )
+        user = User.objects.create_user(username="other", email="other@gmail.com")
+        client.force_login(user)
+
+        response = client.get(index_url)
+        html = response.content.decode("utf-8")
+        expect(response.status_code) == 200
+        expect(html).excludes("test-analysis-bot")
 
 
 def describe_projects(expect):

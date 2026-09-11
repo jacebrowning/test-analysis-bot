@@ -193,6 +193,51 @@ def describe_authentik_login(expect, client):
         expect(OIDCIdentity.objects.exists()) is False
 
     @pytest.mark.django_db
+    def it_accepts_an_exact_email_address_in_a_real_callback(
+        oidc_provider: LocalOIDCProvider,
+    ):
+        Organization.objects.create(email_domain="jacebrowning@gmail.com")
+        oidc_provider.email = "jacebrowning@gmail.com"
+
+        with override_settings(**oidc_provider.django_settings):
+            authorization_response = client.get("/oidc/authenticate/")
+            query = oidc_provider.capture_authorization(
+                authorization_response["Location"]
+            )
+            callback_response = client.get(
+                "/oidc/callback/",
+                {"code": "valid-code", "state": query["state"][0]},
+            )
+
+        expect(callback_response.status_code) == 302
+        expect(User.objects.filter(email="jacebrowning@gmail.com").exists()) is True
+
+    @pytest.mark.django_db
+    def it_rejects_other_gmail_addresses_when_only_an_exact_email_is_configured(
+        oidc_provider: LocalOIDCProvider,
+    ):
+        Organization.objects.create(email_domain="jacebrowning@gmail.com")
+        oidc_provider.email = "other@gmail.com"
+
+        with override_settings(**oidc_provider.django_settings):
+            authorization_response = client.get("/oidc/authenticate/")
+            query = oidc_provider.capture_authorization(
+                authorization_response["Location"]
+            )
+            callback_response = client.get(
+                "/oidc/callback/",
+                {"code": "valid-code", "state": query["state"][0]},
+                follow=True,
+            )
+
+        expect(callback_response.status_code) == 200
+        expect(callback_response.content.decode()).contains(
+            "Your Authentik email domain is not configured."
+        )
+        expect(User.objects.exists()) is False
+        expect(OIDCIdentity.objects.exists()) is False
+
+    @pytest.mark.django_db
     def it_explains_unverified_email_claims(
         organization, oidc_provider: LocalOIDCProvider
     ):

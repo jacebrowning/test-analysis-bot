@@ -17,16 +17,30 @@ from .constants import TEST_OTP
 from .models import Organization
 
 
+def organization_for_email(email: str) -> Organization | None:
+    """Match a full address first, then a shared domain."""
+    local_part, separator, domain = email.strip().rpartition("@")
+    if not separator or not local_part or not domain:
+        return None
+    exact = (
+        Organization.objects.filter(email_domain__iexact=email.strip())
+        .order_by("pk")
+        .first()
+    )
+    if exact:
+        return exact
+    return (
+        Organization.objects.filter(email_domain__iexact=domain).order_by("pk").first()
+    )
+
+
 def has_organization_email_domain(email: str) -> bool:
     try:
         validate_email(email)
     except ValidationError:
         return False
 
-    local_part, separator, domain = email.rpartition("@")
-    if not separator or not local_part or not domain:
-        return False
-    return Organization.objects.filter(email_domain__iexact=domain).exists()
+    return organization_for_email(email) is not None
 
 
 def get_or_create_user(email: str) -> User:

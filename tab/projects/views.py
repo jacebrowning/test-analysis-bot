@@ -17,8 +17,7 @@ from django.views.generic import FormView, ListView, TemplateView
 import log
 from django_tables2 import SingleTableMixin
 
-from tab.core.helpers import get_or_create_user
-from tab.core.models import Organization
+from tab.core.helpers import get_or_create_user, organization_for_email
 from tab.metrics.constants import DELTA_THRESHOLD
 from tab.metrics.models import Alert
 
@@ -37,9 +36,10 @@ class IndexView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
 
         assert self.request.user.is_authenticated
-        email_domain = self.request.user.email.split("@")[1]
-        try:
-            organization = Organization.objects.get(email_domain=email_domain)
+        organization = organization_for_email(self.request.user.email)
+        if organization is None:
+            projects = Project.objects.none()
+        else:
             projects = (
                 Project.objects.filter(
                     repository__startswith=organization.repository_index
@@ -50,9 +50,6 @@ class IndexView(LoginRequiredMixin, TemplateView):
                 )
                 .order_by("repository")
             )
-        except Organization.DoesNotExist:
-            organization = None
-            projects = Project.objects.none()
 
         context["projects"] = projects
         if self.request.user.is_staff:

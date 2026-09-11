@@ -35,7 +35,12 @@ class OIDCIdentity(models.Model):
 
 class Organization(models.Model):
     name = models.CharField(max_length=100)
-    email_domain = models.CharField(max_length=100, blank=True)
+    email_domain = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Email domain or address",
+        help_text="Company domain (example.com) or a single address (you@gmail.com)",
+    )
     repository_index = models.URLField(unique=True)
     repository_token = models.CharField(max_length=100, blank=True)
     github_app_id = models.IntegerField(

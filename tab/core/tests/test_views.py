@@ -74,6 +74,24 @@ def describe_login_and_verify(expect, client):
         expect(html).contains("No organization found for that email domain.")
 
     @pytest.mark.django_db
+    def it_accepts_an_exact_email_address():
+        Organization.objects.create(email_domain="jacebrowning@gmail.com")
+        response = client.post(
+            login_url, {"email": "jacebrowning@gmail.com"}, follow=True
+        )
+        expect(response.status_code) == 200
+        html = response.content.decode("utf-8")
+        expect(html).contains("Verify One-Time Password")
+
+    @pytest.mark.django_db
+    def it_rejects_other_addresses_on_the_same_consumer_domain():
+        Organization.objects.create(email_domain="jacebrowning@gmail.com")
+        response = client.post(login_url, {"email": "other@gmail.com"}, follow=True)
+        expect(response.status_code) == 200
+        html = response.content.decode("utf-8")
+        expect(html).contains("No organization found for that email domain.")
+
+    @pytest.mark.django_db
     @pytest.mark.parametrize(
         "email",
         [

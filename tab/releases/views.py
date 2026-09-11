@@ -3,6 +3,7 @@ from django.db.models import OuterRef, Q, Subquery
 from django.urls import reverse
 from django.views.generic import TemplateView
 
+from tab.core.helpers import organization_for_email
 from tab.core.models import Organization
 
 from .constants import CHANGE_HISTORY_LIMIT
@@ -16,11 +17,7 @@ class IndexView(LoginRequiredMixin, TemplateView):
 
     def get_organization(self) -> Organization | None:
         assert self.request.user.is_authenticated
-        email_domain = self.request.user.email.split("@")[1]
-        try:
-            return Organization.objects.get(email_domain=email_domain)
-        except Organization.DoesNotExist:
-            return None
+        return organization_for_email(self.request.user.email)
 
     def get_history_limit(self) -> int:
         raw = self.request.GET.get("limit")

@@ -9,7 +9,11 @@ from django.http import HttpRequest
 import jwt
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 
-from .helpers import get_or_create_user, has_organization_email_domain
+from .helpers import (
+    get_or_create_user,
+    has_organization_email_domain,
+    organization_for_email,
+)
 from .models import OIDCIdentity, Organization
 from .oidc import OIDCFailureReason, set_oidc_failure
 
@@ -52,13 +56,13 @@ class AuthentikOIDCBackend(OIDCAuthenticationBackend):
         if not isinstance(email, str) or not self.verify_claims(claims):
             raise SuspiciousOperation("OIDC email claim is not authorized")
         with transaction.atomic():
-            domain = email.rpartition("@")[2]
-            organization = (
-                Organization.objects.select_for_update()
-                .filter(email_domain__iexact=domain)
-                .order_by("pk")
-                .first()
-            )
+            organization = organization_for_email(email)
+            if organization is not None:
+                organization = (
+                    Organization.objects.select_for_update()
+                    .filter(pk=organization.pk)
+                    .first()
+                )
             if organization is None:
                 self._set_failure(OIDCFailureReason.DOMAIN_NOT_ALLOWED)
                 raise SuspiciousOperation("OIDC email claim is not authorized")
