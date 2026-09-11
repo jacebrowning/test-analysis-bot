@@ -1,4 +1,5 @@
 from django.contrib import admin, messages
+from django.utils.safestring import mark_safe
 
 import log
 
@@ -23,12 +24,17 @@ class OrganizationAdmin(admin.ModelAdmin):
     list_display = (
         "name",
         "email_domain",
-        "repository_index",
+        "_repository_index",
         "created_at",
         "updated_at",
     )
     ordering = ("-updated_at",)
     list_filter = ("created_at", "updated_at")
+
+    @admin.display(description="Repository Index", ordering="repository_index")
+    def _repository_index(self, organization: Organization):
+        url = organization.repository_index
+        return mark_safe(f'<a href="{url}" target="_blank">{url}</a>')
 
     @admin.action(description="Regenerate key for selected organizations")
     def regenerate_key(self, request, queryset):

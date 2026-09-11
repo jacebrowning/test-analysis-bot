@@ -38,7 +38,7 @@ class ProjectAdmin(admin.ModelAdmin):
     search_fields = ("repository", "error_indicators")
     list_display = (
         "id",
-        "repository",
+        "_repository",
         "default_branch",
         "branch_inactive_threshold_humanized",
         "test_inactive_threshold_humanized",
@@ -56,6 +56,12 @@ class ProjectAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     )
+
+    @admin.display(description="Repository", ordering="repository")
+    def _repository(self, project: Project):
+        return mark_safe(
+            f'<a href="{project.repository}" target="_blank">{project.repository}</a>'
+        )
 
     @admin.display(description="Branches Inactive")
     def branch_inactive_threshold_humanized(self, project: Project) -> str:
