@@ -44,6 +44,7 @@ $(DEPENDENCIES): poetry.lock
 	@ mkdir -p staticfiles
 	@ poetry config virtualenvs.in-project true
 	poetry install --without=docs
+	poetry run playwright install
 	@ touch $@
 
 ifndef CI
