@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - main
+      - custom
 
 env:
   TAB_API_URL: ${{ vars.TAB_API_URL }}
