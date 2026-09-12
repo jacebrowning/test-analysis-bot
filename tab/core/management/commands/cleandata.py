@@ -13,12 +13,14 @@ from tab.releases.models import Environment, Release
 
 CHUNK_SIZE = 1000
 TIME_BUDGET = timedelta(minutes=45)
-US_EAST_TZ = ZoneInfo("America/New_York")
+CORE_TZ = ZoneInfo("America/Los_Angeles")
 
 
-def is_weekday(moment: datetime | None = None) -> bool:
-    now = (moment or timezone.now()).astimezone(US_EAST_TZ)
-    return now.weekday() < 5
+def should_run(moment: datetime | None = None) -> bool:
+    now = (moment or timezone.now()).astimezone(CORE_TZ)
+    is_weekday = now.weekday() < 5
+    is_off_peak = now.hour in {2, 3}
+    return not is_weekday or is_off_peak
 
 
 class Command(BaseCommand):
@@ -33,12 +35,12 @@ class Command(BaseCommand):
         parser.add_argument(
             "--force",
             action="store_true",
-            help="Run stale data cleanup even on weekdays",
+            help="Run stale data cleanup even during peak working hours",
         )
 
     def handle(self, *args, **options):
-        if is_weekday() and not options["force"]:
-            log.info("Skipping stale data cleanup until the weekend")
+        if not options["force"] and not should_run():
+            log.info("Skipping stale data cleanup during peak working hours")
             return
 
         dry_run = options["dry_run"]

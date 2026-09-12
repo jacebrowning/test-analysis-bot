@@ -71,10 +71,12 @@ class APIReporter implements Reporter {
             message: result.error?.stack,
             target: process.env.CI_TARGET || process.env.TARGET || 'web',
             platform: process.env.RUNNER_OS || process.platform,
+            browser: process.env.CI_BROWSER || null,
             url: process.env.CI_ENVIRONMENT_URL || process.env.VERCEL_BASE_URL || null,
             // Extra test and result data
             annotations: test.annotations.map((a) => a.type), // e.g. 'fail' or 'fixme'
             id: test.id, // computed file/test/project ID used for reruns
+            logs: '', // arbitrary JSON string of logs from the test
             retry: result.retry,
             tags: test.tags, // e.g. '@snapshot' or '@skipLocalEngine'
             // Extra environment variables

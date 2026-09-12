@@ -15,8 +15,8 @@ CHECKOUT_COMMAND = (
     "git fetch origin && git checkout {branch} && git reset --hard origin/{branch}"
 )
 
-PENDING_THRESHOLD = timedelta(minutes=10)  # minimum duration before reporting failures
-EXPIRED_THRESHOLD = PENDING_THRESHOLD * 3  # maximum duration to expect suite runs
+PENDING_THRESHOLD = timedelta(minutes=15)  # minimum duration before reporting failures
+EXPIRED_THRESHOLD = PENDING_THRESHOLD * 2  # maximum duration to expect suite runs
 FAILURE_RATE_EPSILON = 0.001  # small value to keep tests disabled for a bit longer
 RESTORATION_THRESHOLD = timedelta(days=3)  # minimum duration to keep tests disabled
 

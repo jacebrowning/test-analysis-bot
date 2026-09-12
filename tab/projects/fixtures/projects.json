@@ -35,7 +35,9 @@
     "pk": 3,
     "fields": {
       "repository": "https://github.com/KittyCAD/engine",
-      "default_branches": ["main"],
+      "default_branches": [
+        "main"
+      ],
       "test_inactive_threshold": "0",
       "branch_inactive_threshold": "0",
       "result_stale_threshold": "0",
@@ -48,7 +50,9 @@
     "pk": 4,
     "fields": {
       "repository": "https://github.com/KittyCAD/website",
-      "default_branches": ["main"],
+      "default_branches": [
+        "main"
+      ],
       "test_inactive_threshold": "0",
       "branch_inactive_threshold": "0",
       "result_stale_threshold": "0",
@@ -61,7 +65,9 @@
     "pk": 5,
     "fields": {
       "repository": "https://github.com/KittyCAD/text-to-cad",
-      "default_branches": ["main"],
+      "default_branches": [
+        "main"
+      ],
       "test_inactive_threshold": "0",
       "branch_inactive_threshold": "0",
       "result_stale_threshold": "0",
@@ -74,7 +80,9 @@
     "pk": 6,
     "fields": {
       "repository": "https://github.com/KittyCAD/test-analysis-bot",
-      "default_branches": ["main"],
+      "default_branches": [
+        "main"
+      ],
       "test_inactive_threshold": "0",
       "branch_inactive_threshold": "0",
       "result_stale_threshold": "0",
@@ -87,7 +95,9 @@
     "pk": 7,
     "fields": {
       "repository": "https://github.com/KittyCAD/api",
-      "default_branches": ["main"],
+      "default_branches": [
+        "main"
+      ],
       "test_inactive_threshold": "0",
       "branch_inactive_threshold": "0",
       "result_stale_threshold": "0",
@@ -237,6 +247,7 @@
       "commit": "a1b2c3d4e5f6789",
       "target": "desktop",
       "platform": "linux",
+      "browser": null,
       "final": true,
       "status": "passed",
       "duration": 12.5,
@@ -255,6 +266,7 @@
       "commit": "a1b2c3d0",
       "target": "desktop",
       "platform": "linux",
+      "browser": null,
       "final": true,
       "status": "failed",
       "duration": 8.0,
@@ -273,6 +285,7 @@
       "commit": "b2c3d4e5f67890a1",
       "target": "desktop",
       "platform": "linux",
+      "browser": null,
       "final": true,
       "status": "passed",
       "duration": 5.2,
@@ -291,6 +304,7 @@
       "commit": "c3d4e5f67890a1b2",
       "target": "desktop",
       "platform": "macos",
+      "browser": null,
       "final": true,
       "status": "failed",
       "duration": 3.1,
@@ -309,6 +323,7 @@
       "commit": "d4e5f67890a1b2c3",
       "target": "desktop",
       "platform": "linux",
+      "browser": null,
       "final": true,
       "status": "passed",
       "duration": 4.8,
@@ -327,6 +342,7 @@
       "commit": "a1b2c3d4e5f6789",
       "target": "desktop",
       "platform": "linux",
+      "browser": null,
       "final": true,
       "status": "passed",
       "duration": 6.0,
@@ -345,6 +361,7 @@
       "commit": "e5f67890a1b2c3d4",
       "target": "desktop",
       "platform": "macos",
+      "browser": null,
       "final": true,
       "status": "failed",
       "duration": 2.5,
@@ -363,6 +380,7 @@
       "commit": "f67890a1b2c3d4e5",
       "target": "desktop",
       "platform": "linux",
+      "browser": null,
       "final": true,
       "status": "passed",
       "duration": 5.5,
@@ -465,6 +483,7 @@
       "commit": "a1b2c3d4e5f6789",
       "target": "desktop",
       "platform": "linux",
+      "browser": null,
       "final": true,
       "status": "failed",
       "duration": 2.0,
@@ -483,6 +502,7 @@
       "commit": "a1b2c3d4e5f6789",
       "target": "desktop",
       "platform": "linux",
+      "browser": null,
       "final": true,
       "status": "skipped",
       "duration": null,
@@ -505,6 +525,7 @@
       "commit": "abc123",
       "target": "desktop",
       "platform": "linux",
+      "browser": null,
       "final": true,
       "status": "passed",
       "duration": 20.0,
@@ -529,6 +550,7 @@
       "commit": "abc123",
       "target": "web",
       "platform": "macos",
+      "browser": "Firefox",
       "final": true,
       "status": "failed",
       "duration": 25.0,
@@ -553,6 +575,7 @@
       "commit": "abc123",
       "target": "web",
       "platform": "linux",
+      "browser": null,
       "final": true,
       "status": "timedOut",
       "duration": 120.0,
@@ -570,10 +593,11 @@
       "commit": "a1b2c3d4e5f6789",
       "target": "desktop",
       "platform": "linux",
+      "browser": null,
       "final": true,
       "status": "failed",
       "duration": 41.0,
-      "message": "Error: expect(locator).toBeVisible() failed\n\nLocator: getByTestId('units-menu')\nExpected: visible\nReceived: hidden\nTimeout: 5000ms\n\nExpected substring: \"yd\"\nReceived string:    \"Default units for current file mm\"\n\n-removed playwright line\n+added playwright line\n\n--- Playwright / Vitest unified snapshot ---\nError: expect(string).toMatchSnapshot(expected) failed\n\n  @@ -1,8 +1,7 @@\n   [settings]\n   modeling = { }\n  -command_bar = { }\n  +command_palette = { }\n\n  Snapshot: verify-named-view-gets-created.toml\n\n--- Expectorate / unified diff ---\n@@ -9,12 +9,13 @@\n\n ```kcl\n ellipse(\n   @sketchOrSurface: Sketch | Plane | Face,\n   center: Point2d,\n-  majorRadius: number(Length),\n   minorRadius: number(Length),\n+  majorRadius?: number(Length),\n+  majorAxis?: Point2d,\n   tag?: tag,\n ): Sketch\n ```\n\n--- Pytest dict / approx diffs ---\nE         +     \"/metrics\": {\nE         -     \"/health\": {\nE           assert response.get_volume() == pytest.approx(\nE                8.295468715405207, rel=0, abs=1e-5\nE            )\nE           assert 16.100358703139904 == 8.295468715405207 ± 1.0e-05\nE\nE             comparison failed\nE             Obtained: 16.100358703139904\nE             Expected: 8.295468715405207 ± 1.0e-05\n\n--- Rust assert_eq ---\nassertion `left == right` failed\n  left: \"expected\"\n right: \"actual\"\n\n--- Rust pretty_assertions ---\nassertion failed: `(left == right)`\n\nDiff < left / right > :\n<[DEVELOPMENT] Account Deletion Confirmation\n>Account Deletion Confirmation\n\nstack backtrace:\n   0: __rustc::rust_begin_unwind\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate\n- waiting for getByTestId('units-menu')",
+      "message": "Error: expect(locator).toBeVisible() failed\n\nLocator: getByTestId('units-menu')\nExpected: visible\nReceived: hidden\nTimeout: 5000ms\n\nExpected substring: \"yd\"\nReceived string:    \"Default units for current file mm\"\n\n-removed playwright line\n+added playwright line\n\n--- Playwright / Vitest unified snapshot ---\nError: expect(string).toMatchSnapshot(expected) failed\n\n  @@ -1,8 +1,7 @@\n   [settings]\n   modeling = { }\n  -command_bar = { }\n  +command_palette = { }\n\n  Snapshot: verify-named-view-gets-created.toml\n\n--- Expectorate / unified diff ---\n@@ -9,12 +9,13 @@\n\n ```kcl\n ellipse(\n   @sketchOrSurface: Sketch | Plane | Face,\n   center: Point2d,\n-  majorRadius: number(Length),\n   minorRadius: number(Length),\n+  majorRadius?: number(Length),\n+  majorAxis?: Point2d,\n   tag?: tag,\n ): Sketch\n ```\n\n--- Pytest dict / approx diffs ---\nE         +     \"/metrics\": {\nE         -     \"/health\": {\nE           assert response.get_volume() == pytest.approx(\nE                8.295468715405207, rel=0, abs=1e-5\nE            )\nE           assert 16.100358703139904 == 8.295468715405207 \u00b1 1.0e-05\nE\nE             comparison failed\nE             Obtained: 16.100358703139904\nE             Expected: 8.295468715405207 \u00b1 1.0e-05\n\n--- Rust assert_eq ---\nassertion `left == right` failed\n  left: \"expected\"\n right: \"actual\"\n\n--- Rust pretty_assertions ---\nassertion failed: `(left == right)`\n\nDiff < left / right > :\n<[DEVELOPMENT] Account Deletion Confirmation\n>Account Deletion Confirmation\n\nstack backtrace:\n   0: __rustc::rust_begin_unwind\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate\n- waiting for getByTestId('units-menu')",
       "metadata": {},
       "created_at": "2099-01-01T11:00:00.000Z"
     }
@@ -588,6 +612,7 @@
       "commit": "a1b2c3d4e5f6789",
       "target": "desktop",
       "platform": "linux",
+      "browser": null,
       "final": true,
       "status": "passed",
       "duration": 104.0,

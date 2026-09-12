@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import AccessMixin, LoginRequiredMixin
 from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
@@ -24,7 +24,13 @@ from tab.metrics.models import Alert
 from .constants import ALL_BRANCHES, FAILURE_RATE_EPSILON
 from .enums import Platform
 from .forms import BulkUpdateTestForm, UpdateTestForm
-from .helpers import build_metrics_json, get_disabled_test_metrics
+from .helpers import (
+    EXPORT_TOKEN_PARAM,
+    build_metrics_json,
+    get_disabled_test_metrics,
+    tokenize,
+    valid_export_token,
+)
 from .models import Project, Result, Run, Status, Test
 from .tables import DisabledTestTable, ResultTable, TestResultTable, TestTable
 
@@ -543,6 +549,10 @@ class TestResultsView(LoginRequiredMixin, SingleTableMixin, FormView):
             or bool(platform_filter_links)
             or bool(context["platform"])
         )
+        context["download_url"] = tokenize(
+            self.request,
+            reverse("projects:test-export", args=[project.path, test.id]),
+        )
 
         return context
 
@@ -664,6 +674,10 @@ class TestResultView(LoginRequiredMixin, TemplateView):
         context["test"] = test
         context["result"] = result
         context["status"] = Status(result.status)
+        context["download_url"] = tokenize(
+            self.request,
+            reverse("projects:result-export", args=[project.path, test.id, result.id]),
+        )
 
         if self.request.user.is_staff:
             context["admin_url"] = reverse(
@@ -687,12 +701,30 @@ class ResultDetailsView(LoginRequiredMixin, TemplateView):
 
 class DataExportMixin:
     def _attachment(
-        self, project: Project, body: str, suffix: str = ""
+        self,
+        project: Project,
+        body: str,
+        suffix: str = "",
+        *,
+        extension: str = "json",
+        content_type: str = "application/json; charset=utf-8",
     ) -> HttpResponse:
         stem = project.path.replace("/", "-").lower()
-        filename = f"tab-ai-data-{stem}{suffix}.json"
-        response = HttpResponse(body, content_type="application/json; charset=utf-8")
+        filename = f"tab-export-{stem}{suffix}.{extension}"
+        response = HttpResponse(body, content_type=content_type)
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+
+class ExportAccessMixin(AccessMixin, View):
+    def dispatch(self, request, *args, **kwargs):
+        token = request.GET.get(EXPORT_TOKEN_PARAM, "")
+        if not request.user.is_authenticated and not valid_export_token(token):
+            return self.handle_no_permission()
+
+        response = super().dispatch(request, *args, **kwargs)
+        response["Cache-Control"] = "private, no-store"
+        response["Referrer-Policy"] = "no-referrer"
         return response
 
 
@@ -700,9 +732,9 @@ class LeastReliableTestsMixin:
     def _least_reliable_tests(self, project: Project) -> list[Test]:
         week_ago = timezone.now() - timedelta(days=7)
         least_reliable = (
-            Q(failure_rate__gt=0.40, block_rate__gt=0)
+            Q(failure_rate__gt=0.25, block_rate__gt=0)
             | Q(block_rate__gt=0.05, failure_rate__gt=0.20)
-            | Q(failure_rate__gt=0.50)
+            | Q(failure_rate__gt=0.33)
             | Q(average_duration__gt=90)
         )
         queryset = (
@@ -714,10 +746,29 @@ class LeastReliableTestsMixin:
                 disabled_at__isnull=True,
             )
             .exclude(last_result__status=Status.DISABLED)
-            .select_related("suite")
+            .select_related("maintainer", "suite")
             .order_by("-failure_rate", "-average_duration")[:10]
         )
         return sorted(queryset, key=lambda t: str(t).lower())
+
+
+class TestMaintainerView(LoginRequiredMixin, View):
+    def post(self, request, *args, **kwargs):
+        project = get_object_or_404(
+            Project, repository__iendswith=self.kwargs["path"].strip("/")
+        )
+        test = get_object_or_404(Test, pk=self.kwargs["test_id"], project=project)
+
+        action = request.POST.get("action")
+        if action == "assign":
+            test.maintainer = request.user
+        elif action == "clear":
+            test.maintainer = None
+        else:
+            return HttpResponse("Invalid maintainer action", status=400)
+
+        test.save(update_fields=["maintainer", "updated_at"])
+        return redirect("projects:metrics", path=project.path)
 
 
 class MetricsView(LeastReliableTestsMixin, LoginRequiredMixin, TemplateView):
@@ -734,6 +785,10 @@ class MetricsView(LeastReliableTestsMixin, LoginRequiredMixin, TemplateView):
         tests_sorted = self._least_reliable_tests(project)
         context["least_reliable_tests"] = tests_sorted
         context["disabled_test_metrics"] = get_disabled_test_metrics(project)
+        context["download_url"] = tokenize(
+            self.request,
+            reverse("projects:metrics-export", args=[project.path]),
+        )
         if self.request.user.is_staff:
             context["admin_url"] = (
                 reverse(
@@ -746,7 +801,7 @@ class MetricsView(LeastReliableTestsMixin, LoginRequiredMixin, TemplateView):
 
 
 class MetricsDownloadView(
-    DataExportMixin, LeastReliableTestsMixin, LoginRequiredMixin, View
+    ExportAccessMixin, DataExportMixin, LeastReliableTestsMixin, View
 ):
 
     def get(self, request, *args, **kwargs):
@@ -757,7 +812,7 @@ class MetricsDownloadView(
         return self._attachment(project, build_metrics_json(project, tests))
 
 
-class MetricsRawView(LeastReliableTestsMixin, LoginRequiredMixin, TemplateView):
+class MetricsRawView(ExportAccessMixin, LeastReliableTestsMixin, TemplateView):
 
     template_name = "projects/export.html"
 
@@ -768,7 +823,12 @@ class MetricsRawView(LeastReliableTestsMixin, LoginRequiredMixin, TemplateView):
         )
         context["project"] = project
         tests = self._least_reliable_tests(project)
-        context["export_json"] = build_metrics_json(project, tests)
+        context["heading"] = "AI Data"
+        context["export_body"] = build_metrics_json(project, tests)
+        context["download_url"] = tokenize(
+            self.request,
+            reverse("projects:metrics-export", args=[project.path]),
+        )
         context["back_url"] = reverse("projects:metrics", args=[project.path])
         context["back_label"] = "Back to Metrics"
         return context
@@ -782,14 +842,14 @@ class SingleTestMixin:
             Project, repository__iendswith=self.kwargs["path"].strip("/")
         )
         test = get_object_or_404(
-            Test.objects.select_related("suite"),
+            Test.objects.select_related("suite", "maintainer"),
             project=project,
             id=self.kwargs["test_id"],
         )
         return project, test
 
 
-class TestDownloadView(DataExportMixin, SingleTestMixin, LoginRequiredMixin, View):
+class TestDownloadView(ExportAccessMixin, DataExportMixin, SingleTestMixin, View):
 
     def get(self, request, *args, **kwargs):
         project, test = self._project_and_test()
@@ -797,7 +857,7 @@ class TestDownloadView(DataExportMixin, SingleTestMixin, LoginRequiredMixin, Vie
         return self._attachment(project, body, suffix=f"-test-{test.pk}")
 
 
-class TestRawView(SingleTestMixin, LoginRequiredMixin, TemplateView):
+class TestRawView(ExportAccessMixin, SingleTestMixin, TemplateView):
 
     template_name = "projects/export.html"
 
@@ -806,9 +866,52 @@ class TestRawView(SingleTestMixin, LoginRequiredMixin, TemplateView):
         project, test = self._project_and_test()
         context["project"] = project
         context["test"] = test
-        context["export_json"] = build_metrics_json(project, [test], limit=25)
+        context["heading"] = "AI Data"
+        context["export_body"] = build_metrics_json(project, [test], limit=25)
+        context["download_url"] = tokenize(
+            self.request,
+            reverse("projects:test-export", args=[project.path, test.id]),
+        )
         context["back_url"] = reverse(
             "projects:test-results", args=[project.path, test.id]
         )
         context["back_label"] = "Back to Test"
+        return context
+
+
+class ResultDownloadView(ExportAccessMixin, DataExportMixin, SingleTestMixin, View):
+
+    def get(self, request, *args, **kwargs):
+        project, test = self._project_and_test()
+        result = get_object_or_404(Result, test=test, id=self.kwargs["result_id"])
+        return self._attachment(
+            project,
+            result.prompt,
+            suffix=f"-result-{result.pk}",
+            extension="md",
+            content_type="text/plain; charset=utf-8",
+        )
+
+
+class ResultRawView(ExportAccessMixin, SingleTestMixin, TemplateView):
+
+    template_name = "projects/export.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        project, test = self._project_and_test()
+        result = get_object_or_404(Result, test=test, id=self.kwargs["result_id"])
+        context["project"] = project
+        context["test"] = test
+        context["result"] = result
+        context["heading"] = "AI Prompt"
+        context["export_body"] = result.prompt
+        context["download_url"] = tokenize(
+            self.request,
+            reverse("projects:result-export", args=[project.path, test.id, result.id]),
+        )
+        context["back_url"] = reverse(
+            "projects:test-result", args=[project.path, test.id, result.id]
+        )
+        context["back_label"] = "Back to Result"
         return context

@@ -1,6 +1,6 @@
 import pytest
 
-from ..enums import Platform, Status, Target
+from ..enums import Browser, Platform, Status, Target
 
 
 def describe_status(expect):
@@ -81,3 +81,17 @@ def describe_platform(expect):
         expect(Platform.normalize("win32")) == "windows"
         expect(Platform.normalize("linux")) == "linux"
         expect(Platform.normalize("Ubuntu")) == "linux"
+
+
+def describe_browser(expect):
+    def it_capitalizes_known_names():
+        expect(Browser.normalize("chromium")) == "Chromium"
+        expect(Browser.normalize("CHROME")) == "Chrome"
+        expect(Browser.normalize("firefox")) == "Firefox"
+        expect(Browser.normalize("webkit")) == "WebKit"
+        expect(Browser.normalize("Safari")) == "Safari"
+        expect(Browser.normalize("msedge")) == "Edge"
+
+    def it_leaves_unknown_names_unchanged():
+        expect(Browser.normalize("chrome-beta")) == "chrome-beta"
+        expect(Browser.normalize("MyHeadless")) == "MyHeadless"

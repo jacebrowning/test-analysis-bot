@@ -86,18 +86,31 @@ class TestHistoryManager(models.Manager):
 
 class SuiteHistoryManager(models.Manager):
     def create_from_suite(self, suite: Suite, run: Run | None = None):
-        limit = timezone.now() - timedelta(hours=1)
-        if self.filter(suite=suite, timestamp__gte=limit).exists():
-            log.debug(f"Skipped redundant suite metric creation: {suite}")
-            return None
-        if suite.average_setup_duration < 0:
+        if (
+            suite.average_setup_duration < 0
+            and suite.average_tests_duration < 0
+            and suite.average_teardown_duration < 0
+        ):
             log.debug(f"Skipped suite metric creation for new suite")
             return None
 
+        values = {
+            "run": run,
+            "average_setup_duration": suite.average_setup_duration,
+            "average_tests_duration": suite.average_tests_duration,
+            "average_teardown_duration": suite.average_teardown_duration,
+        }
+        limit = timezone.now() - timedelta(hours=1)
+        recent = self.filter(suite=suite, timestamp__gte=limit).first()
+        if recent:
+            for field, value in values.items():
+                setattr(recent, field, value)
+            recent.save(update_fields=list(values))
+            return recent
+
         history: SuiteHistory = self.create(  # type: ignore[assignment]
             suite=suite,
-            run=run,
-            average_setup_duration=suite.average_setup_duration,
+            **values,
         )
 
         cutoff = timezone.now() - timedelta(weeks=26)

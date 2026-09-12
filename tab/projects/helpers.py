@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import json
+import secrets
+import string
+from datetime import timedelta
 from datetime import timezone as dt_timezone
 from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.cache import cache
+from django.http import HttpRequest
 from django.urls import reverse
 from django.utils import timezone as django_timezone
 
@@ -122,6 +127,8 @@ def build_result_prompt(result: Result) -> str:
     )
     lines.append(f"- Added in branch: {test.original_branch or '—'}")
     lines.append(f"- Added in commit: {test.original_commit or '—'}")
+    maintainer_email = test.maintainer.email if test.maintainer else None
+    lines.append(f"- Maintainer: {maintainer_email or '—'}")
     lines.append("")
     lines.append("## Historical signals")
     lines.append("")
@@ -144,12 +151,8 @@ def build_result_prompt(result: Result) -> str:
         else:
             lines.append("- Reason: —")
         lines.append(f"- Tracker: {test.disabled_tracker or '—'}")
-        updated_by = "—"
-        if user := getattr(test, "disabled_user", None):
-            updated_by = (
-                user.email if getattr(user, "email", None) else user.get_username()
-            )
-        lines.append(f"- Last updated by: {updated_by}")
+        disabled_by = test.disabled_user.email if test.disabled_user else None
+        lines.append(f"- Last updated by: {disabled_by or '—'}")
         lines.append("")
         lines.append(
             "_TAB has a feature to suppress failures in known broken or flaky tests._"
@@ -172,6 +175,7 @@ def build_result_prompt(result: Result) -> str:
     lines.append(
         f"- Platform: {Platform(result.platform).label if result.platform else '—'}"
     )
+    lines.append(f"- Browser: {result.browser or '—'}")
     lines.append(f"- New failure: {str(result.new_failure).lower()}")
     lines.append("")
     lines.append(
@@ -245,6 +249,7 @@ def build_metrics_json(project: Project, tests: list[Test], limit: int = 10) -> 
             "commit": r.commit or None,
             "target": r.target or None,
             "platform": r.platform or None,
+            "browser": r.browser or None,
             "status": r.status,
             "setup_duration": setup_duration(r),
             "test_duration": r.duration,
@@ -314,6 +319,7 @@ def build_metrics_json(project: Project, tests: list[Test], limit: int = 10) -> 
                     "suite": test.suite.name if test.suite else None,
                     "original_branch": test.original_branch or None,
                     "original_commit": test.original_commit or None,
+                    "maintainer": test.maintainer.email if test.maintainer else None,
                     "markers": test.markers,
                     "command": interpolated_command(test),
                     "failure_rate": (
@@ -343,3 +349,29 @@ def build_metrics_json(project: Project, tests: list[Test], limit: int = 10) -> 
     }
 
     return json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+
+
+EXPORT_TOKEN_PARAM = "token"
+EXPORT_TOKEN_TIMEOUT = timedelta(days=7).total_seconds()
+_EXPORT_TOKEN_CACHE_PREFIX = "export:"
+_EXPORT_TOKEN_REQUEST_ATTR = "_export_token"
+
+
+def valid_export_token(token: str) -> bool:
+    return bool(token) and cache.get(_EXPORT_TOKEN_CACHE_PREFIX + token) is not None
+
+
+def tokenize(request: HttpRequest, path: str) -> str:
+    token = getattr(request, _EXPORT_TOKEN_REQUEST_ATTR, None) or request.GET.get(
+        EXPORT_TOKEN_PARAM
+    )
+    if not isinstance(token, str) or not valid_export_token(token):
+        token = _generate_export_token()
+    setattr(request, _EXPORT_TOKEN_REQUEST_ATTR, token)
+    return request.build_absolute_uri(f"{path}?{EXPORT_TOKEN_PARAM}={token}")
+
+
+def _generate_export_token() -> str:
+    token = "".join(secrets.choice(string.ascii_letters) for _ in range(8))
+    cache.set(_EXPORT_TOKEN_CACHE_PREFIX + token, True, timeout=EXPORT_TOKEN_TIMEOUT)
+    return token

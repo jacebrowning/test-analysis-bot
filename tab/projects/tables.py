@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.contrib.humanize.templatetags.humanize import naturaltime
 from django.template.loader import render_to_string
 from django.utils import timezone
+from django.utils.html import escape
 from django.utils.safestring import mark_safe
 
 import django_tables2 as tables
@@ -265,6 +266,12 @@ class TestResultTable(tables.Table):
             "th": {"class": "text-center"},
         },
     )
+    browser = tables.Column(
+        attrs={
+            "td": {"class": "text-center"},
+            "th": {"class": "text-center"},
+        },
+    )
     duration = tables.Column(
         attrs={
             "td": {"class": "text-center"},
@@ -282,6 +289,7 @@ class TestResultTable(tables.Table):
             "commit",
             "target",
             "platform",
+            "browser",
             "duration",
             "created_at",
         )
@@ -322,6 +330,11 @@ class TestResultTable(tables.Table):
         return mark_safe(f'<span class="opacity-25">{value}</span>')
 
     def render_platform(self, value, record: Result):
+        if record.final:
+            return value
+        return mark_safe(f'<span class="opacity-25">{value}</span>')
+
+    def render_browser(self, value, record: Result):
         if record.final:
             return value
         return mark_safe(f'<span class="opacity-25">{value}</span>')
@@ -383,6 +396,22 @@ class ResultTable(TestResultTable):
             "th": {"class": "text-center"},
         },
     )
+    target = None
+    platform = None
+    browser = None
+    environment = tables.Column(
+        verbose_name="Environment",
+        empty_values=(),
+        accessor="target",
+        order_by=("target", "platform", "browser"),
+        attrs={
+            "td": {"class": "text-center"},
+            "th": {
+                "class": "text-center",
+                "title": "Target, platform, and browser",
+            },
+        },
+    )
 
     class Meta:
         model = Result
@@ -393,12 +422,11 @@ class ResultTable(TestResultTable):
             "test__block_rate",
             "commit",
             "duration",
-            "target",
-            "platform",
+            "environment",
             "created_at",
         )
         per_page = 100
-        order_by = "test", "target", "platform", "-created_at"
+        order_by = "test", "target", "platform", "browser", "-created_at"
 
     def before_render(self, request):
         if request.GET.get("show") == "fails":
@@ -419,6 +447,20 @@ class ResultTable(TestResultTable):
         return mark_safe(
             f'<a href="{url}" class="text-body text-decoration-none fw-bold">{label}</a>'
         )
+
+    def render_environment(self, record: Result):
+        parts = []
+        if record.target:
+            parts.append(record.get_target_display())
+        if record.platform:
+            parts.append(record.get_platform_display())
+        if record.browser:
+            parts.append(record.browser)
+        text = ", ".join(parts) if parts else "—"
+        html = escape(text)
+        if not record.final:
+            html = f'<span class="opacity-25">{html}</span>'  # type: ignore[assignment]
+        return mark_safe(html)
 
     def render_test__block_rate(self, record: Result):
         label = self._get_block_rate_label(record)

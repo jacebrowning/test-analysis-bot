@@ -36,6 +36,16 @@ urlpatterns = [
         name="test-results",
     ),
     path(
+        "<path:path>/tests/<int:test_id>/results/<int:result_id>/export.md",
+        views.ResultDownloadView.as_view(),
+        name="result-export",
+    ),
+    path(
+        "<path:path>/tests/<int:test_id>/results/<int:result_id>/export",
+        views.ResultRawView.as_view(),
+        name="result-export-page",
+    ),
+    path(
         "<path:path>/tests/<int:test_id>/results/<int:result_id>",
         views.TestResultView.as_view(),
         name="test-result",
@@ -69,6 +79,11 @@ urlpatterns = [
         "<path:path>/metrics/export",
         views.MetricsRawView.as_view(),
         name="metrics-export-page",
+    ),
+    path(
+        "<path:path>/metrics/tests/<int:test_id>/maintainer",
+        views.TestMaintainerView.as_view(),
+        name="test-maintainer",
     ),
     path(
         "<path:path>/metrics",

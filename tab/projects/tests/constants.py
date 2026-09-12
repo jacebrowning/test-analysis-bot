@@ -18,6 +18,7 @@ Use this information to:
 - Date created: 2024-01-01T12:00:00+00:00
 - Added in branch: my-branch
 - Added in commit: abc123
+- Maintainer: maintainer@example.com
 
 ## Historical signals
 
@@ -49,6 +50,7 @@ _This turns blocking failures into a non-blocking status to let PRs merge._
 - Commit: abc123
 - Target: Desktop
 - Platform: macOS
+- Browser: Chromium
 - New failure: true
 
 _New failure: History data indicates the test is only blocking this branch._

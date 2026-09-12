@@ -21,7 +21,7 @@
                         aria-expanded="false">
                     <span class="visually-hidden">Toggle Dropdown</span>
                 </button>
-                <ul class="dropdown-menu">
+                <ul class="dropdown-menu dropdown-menu-end">
                     <li>
                         <a class="dropdown-item small"
                            href="{% url 'projects:tests' result.test.project.path %}"><i class="fa-solid fa-list-check me-2" aria-hidden="true"></i>View All Tests</a>
@@ -35,17 +35,37 @@
         <div class="card mb-4">
             <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <h5 class="card-title mb-0">Result Details</h5>
-                <button type="button"
-                        class="btn btn-sm btn-outline-secondary"
-                        data-copy-prompt="result-prompt-{{ result.pk }}"
-                        {% if not result.prompt %}disabled{% endif %}
-                        title="Copy as Markdown">
-                    <span aria-hidden="true">
-                        <i class="fa-regular fa-copy js-copy-prompt-idle"></i>
-                        <i class="fa-solid fa-check js-copy-prompt-done d-none"></i>
-                    </span>
-                    <span class="ms-1 d-none d-sm-inline">AI Prompt</span>
-                </button>
+                <div class="btn-group">
+                    <button type="button"
+                            class="btn btn-sm btn-outline-secondary"
+                            data-copy-prompt="result-prompt-{{ result.pk }}"
+                            {% if not result.prompt %}disabled{% endif %}
+                            title="Copy as Markdown">
+                        <span aria-hidden="true">
+                            <i class="fa-regular fa-copy js-copy-prompt-idle"></i>
+                            <i class="fa-solid fa-check js-copy-prompt-done d-none"></i>
+                        </span>
+                        <span class="ms-1 d-none d-sm-inline">AI Prompt</span>
+                    </button>
+                    <button type="button"
+                            class="btn btn-sm btn-outline-secondary dropdown-toggle dropdown-toggle-split"
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false"
+                            {% if not result.prompt %}disabled{% endif %}>
+                        <span class="visually-hidden">Toggle Dropdown</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li>
+                            <a class="dropdown-item small"
+                               href="{% url 'projects:result-export-page' project.path test.id result.id %}">Preview Content<i class="fa-solid fa-arrow-right ms-2" aria-hidden="true"></i></a>
+                        </li>
+                        <li>
+                            <button type="button"
+                                    class="dropdown-item small"
+                                    data-copy-agent-url="{{ download_url }}">Copy Agent URL<i class="fa-regular fa-copy ms-2" aria-hidden="true"></i></button>
+                        </li>
+                    </ul>
+                </div>
             </div>
             <div class="card-body">
                 <div class="row g-3">
@@ -96,6 +116,10 @@
                     <div class="col-12 col-sm-6 col-md-4 col-lg-3">
                         <h6 class="text-muted">Platform</h6>
                         <span>{{ result.get_platform_display|default:"—" }}</span>
+                    </div>
+                    <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                        <h6 class="text-muted">Browser</h6>
+                        <span>{{ result.browser|default:"—" }}</span>
                     </div>
                 </div>
                 <hr>

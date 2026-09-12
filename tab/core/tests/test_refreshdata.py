@@ -6,7 +6,7 @@ from django.utils import timezone
 import pytest
 
 from tab.api.constants import TESTS_CACHE_KEY
-from tab.core.management.commands.syncdata import Command
+from tab.core.management.commands.refreshdata import Command
 from tab.projects.enums import Status, Target
 from tab.projects.models import Project, Result
 

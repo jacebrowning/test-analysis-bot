@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (plainMatch && plainMatch[1]) {
             return plainMatch[1];
         }
-        return 'tab-ai-data.json';
+        return 'tab-export.json';
     }
 
     async function downloadAiData(link) {

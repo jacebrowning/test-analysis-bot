@@ -26,7 +26,7 @@ from .constants import (
     RESTORATION_THRESHOLD,
     get_default_branches,
 )
-from .enums import Platform, Status, Target
+from .enums import Browser, Platform, Status, Target
 from .helpers import build_result_prompt, humanize_duration, rerun_failed_jobs
 
 
@@ -164,6 +164,16 @@ class Suite(models.Model):
         editable=False,
         help_text="Seconds of setup duration from recent runs on default branches",
     )
+    average_tests_duration = models.FloatField(
+        default=-1,
+        editable=False,
+        help_text="Seconds of tests duration from recent runs on default branches",
+    )
+    average_teardown_duration = models.FloatField(
+        default=-1,
+        editable=False,
+        help_text="Seconds of teardown duration from recent runs on default branches",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True, db_index=True)
@@ -180,17 +190,53 @@ class Suite(models.Model):
         return f"{self.project} › {self.name}"
 
     def update_average_setup_duration(self) -> bool:
-        old = self.average_setup_duration
+        return self._update_average_duration(
+            "average_setup_duration",
+            "setup_duration",
+            filters={
+                "setup_started_at__isnull": False,
+                "tests_started_at__isnull": False,
+            },
+            order_by="-tests_started_at",
+        )
+
+    def update_average_tests_duration(self) -> bool:
+        return self._update_average_duration(
+            "average_tests_duration",
+            "tests_duration",
+            filters={
+                "tests_started_at__isnull": False,
+                "tests_finished_at__isnull": False,
+            },
+            order_by="-tests_finished_at",
+        )
+
+    def update_average_teardown_duration(self) -> bool:
+        return self._update_average_duration(
+            "average_teardown_duration",
+            "teardown_duration",
+            filters={
+                "tests_finished_at__isnull": False,
+                "teardown_finished_at__isnull": False,
+            },
+            order_by="-teardown_finished_at",
+        )
+
+    def _update_average_duration(
+        self,
+        field: str,
+        attr: str,
+        *,
+        filters: dict,
+        order_by: str,
+    ) -> bool:
+        old = getattr(self, field)
         queryset = self.runs.filter(
             branch__in=self.project.default_branches,
-            setup_started_at__isnull=False,
-            tests_started_at__isnull=False,
-        ).order_by("-tests_started_at")
-        if not queryset.exists():
-            return False
-
+            **filters,
+        ).order_by(order_by)
         runs = list(queryset[:150])
-        durations = [run.setup_duration for run in runs if run.setup_duration > 0]
+        durations = [getattr(run, attr) for run in runs if getattr(run, attr) > 0]
         if not durations:
             return False
 
@@ -198,12 +244,18 @@ class Suite(models.Model):
         if old == new:
             return False
 
-        log.debug(f"Suite has new average setup duration: {old} => {new} seconds")
-        self.average_setup_duration = new
+        log.debug(f"Suite has new {field.replace('_', ' ')}: {old} => {new} seconds")
+        setattr(self, field, new)
         return True
 
     def update(self, run: Run | None = None) -> bool:
-        if not self.update_average_setup_duration():
+        if not any(
+            [
+                self.update_average_setup_duration(),
+                self.update_average_tests_duration(),
+                self.update_average_teardown_duration(),
+            ]
+        ):
             return False
         self.history.create_from_suite(self, run)
         return True
@@ -288,6 +340,14 @@ class Test(models.Model):
         help_text="Hash of the commit that originally added this test",
     )
     original_metadata = models.JSONField(default=dict, blank=True)
+    maintainer = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="maintained_tests",
+        help_text="User responsible for maintaining this test",
+    )
 
     disabled_at = models.DateTimeField(
         null=True,
@@ -604,6 +664,8 @@ class Test(models.Model):
         ):
             log.info(f"Restoring test based on failure rate: {self}")
             self.disabled_at = None
+            self.disabled_reason = ""
+            self.disabled_tracker = None
             # TODO: Find a way to avoid this circular import
             from tab.metrics.models import Alert
 
@@ -646,6 +708,7 @@ class Result(models.Model):
     platform = models.CharField(
         max_length=100, null=True, blank=True, choices=Platform.choices, db_index=True
     )
+    browser = models.CharField(max_length=100, null=True, blank=True, db_index=True)
     final = models.BooleanField(
         default=True, help_text="Indicates this was the final retry", db_index=True
     )
@@ -894,6 +957,8 @@ class Result(models.Model):
             self.target = Target.normalize(self.target)
         if self.platform:
             self.platform = Platform.normalize(self.platform)
+        if self.browser:
+            self.browser = Browser.normalize(self.browser)
         self.status = Status.normalize(
             self.status,
             markers=self.markers,
@@ -910,6 +975,7 @@ class Result(models.Model):
                 commit=self.commit,
                 target=self.target,
                 platform=self.platform,
+                browser=self.browser,
                 final=True,
                 id__lt=self.id,
             ).update(final=False)

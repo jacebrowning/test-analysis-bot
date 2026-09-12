@@ -157,6 +157,8 @@ class SuiteAdmin(admin.ModelAdmin):
     readonly_fields = (
         "tests_count",
         "average_setup_duration",
+        "average_tests_duration",
+        "average_teardown_duration",
         "created_at",
         "updated_at",
     )
@@ -224,7 +226,7 @@ class TestAdmin(admin.ModelAdmin):
         return (
             super()
             .get_queryset(request)
-            .select_related("project", "suite", "last_result")
+            .select_related("project", "suite", "last_result", "maintainer")
         )
 
     search_fields = (
@@ -234,6 +236,7 @@ class TestAdmin(admin.ModelAdmin):
         "suite__name",
         "name",
         "disabled_user__email",
+        "maintainer__email",
     )
     list_display = (
         "id",
@@ -310,7 +313,7 @@ class TestAdmin(admin.ModelAdmin):
 
     actions = [disable, enable, update]
 
-    raw_id_fields = ("project", "suite", "disabled_user")
+    raw_id_fields = ("project", "suite", "maintainer", "disabled_user")
     readonly_fields = (
         "enabled",
         "significant_branches",
@@ -359,6 +362,7 @@ class ResultAdmin(admin.ModelAdmin):
         "_commit",
         "target",
         "platform",
+        "browser",
         "final",
         "status",
         "duration",
@@ -369,6 +373,7 @@ class ResultAdmin(admin.ModelAdmin):
         "status",
         "target",
         "platform",
+        "browser",
         "final",
         "created_at",
         "test__project__repository",

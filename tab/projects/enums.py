@@ -122,3 +122,23 @@ class Platform(models.TextChoices):
             return cls.LINUX.value
         else:
             raise ValueError(f"Unknown platform: {value}")
+
+
+class Browser:
+
+    KNOWN = {
+        "chromium": "Chromium",
+        "chrome": "Chrome",
+        "firefox": "Firefox",
+        "webkit": "WebKit",
+        "safari": "Safari",
+        "edge": "Edge",
+        "msedge": "Edge",
+    }
+
+    @classmethod
+    def normalize(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            return stripped
+        return cls.KNOWN.get(stripped.lower(), stripped)

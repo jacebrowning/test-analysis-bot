@@ -6,11 +6,11 @@ from django.utils import timezone
 
 import pytest
 
-from tab.core.management.commands.cleandata import Command, is_weekday
+from tab.core.management.commands.cleandata import Command, should_run
 from tab.projects.enums import Status
 from tab.projects.models import Project, Result, Test
 
-ET = ZoneInfo("America/New_York")
+PT = ZoneInfo("America/Los_Angeles")
 
 
 def _command_with_budget() -> Command:
@@ -20,23 +20,23 @@ def _command_with_budget() -> Command:
     return command
 
 
-def describe_is_weekday(expect):
-    def it_is_true_on_weekdays():
-        expect(is_weekday(datetime(2026, 8, 7, 10, tzinfo=ET))) is True  # Friday
+def describe_should_run_cleanup(expect):
+    def it_is_true_on_weekends():
+        expect(should_run(datetime(2026, 8, 8, 10, tzinfo=PT))) is True
 
-    def it_is_false_on_saturday():
-        expect(is_weekday(datetime(2026, 8, 8, 10, tzinfo=ET))) is False
+    def it_is_true_on_weekday_off_peak_hours():
+        expect(should_run(datetime(2026, 8, 7, 2, tzinfo=PT))) is True
 
-    def it_is_false_on_sunday():
-        expect(is_weekday(datetime(2026, 8, 9, 10, tzinfo=ET))) is False
+    def it_is_false_during_weekday_peak_hours():
+        expect(should_run(datetime(2026, 8, 7, 10, tzinfo=PT))) is False
 
 
 @pytest.mark.django_db
 def describe_handle_weekend_cleanup(expect):
-    def it_skips_stale_cleanup_on_weekdays(mocker):
+    def it_skips_stale_cleanup_during_weekday_peak_hours(mocker):
         mocker.patch(
-            "tab.core.management.commands.cleandata.is_weekday",
-            return_value=True,
+            "tab.core.management.commands.cleandata.should_run",
+            return_value=False,
         )
         delete_stale = mocker.patch.object(Command, "delete_stale_environments")
 
@@ -46,8 +46,8 @@ def describe_handle_weekend_cleanup(expect):
 
     def it_runs_stale_cleanup_on_weekends(mocker):
         mocker.patch(
-            "tab.core.management.commands.cleandata.is_weekday",
-            return_value=False,
+            "tab.core.management.commands.cleandata.should_run",
+            return_value=True,
         )
         delete_stale = mocker.patch.object(Command, "delete_stale_environments")
         mocker.patch.object(Command, "delete_stale_releases")
@@ -56,10 +56,10 @@ def describe_handle_weekend_cleanup(expect):
 
         expect(delete_stale.called) is True
 
-    def it_runs_stale_cleanup_with_force_on_weekdays(mocker):
+    def it_runs_stale_cleanup_with_force_during_peak_hours(mocker):
         mocker.patch(
-            "tab.core.management.commands.cleandata.is_weekday",
-            return_value=True,
+            "tab.core.management.commands.cleandata.should_run",
+            return_value=False,
         )
         delete_stale = mocker.patch.object(Command, "delete_stale_environments")
         mocker.patch.object(Command, "delete_stale_releases")

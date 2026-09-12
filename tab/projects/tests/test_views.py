@@ -15,6 +15,7 @@ from ..constants import DEFAULT_SUITE
 from ..helpers import (
     METRICS_JSON_RESULT_META,
     METRICS_JSON_TEST_META,
+    _generate_export_token,
     build_metrics_json,
 )
 from ..models import Project, Result, Status, Suite, Test
@@ -252,6 +253,20 @@ def describe_build_metrics_json(expect, admin_user, project: Project):
         expect(row["original_branch"]) == None
         expect(row["original_commit"]) == None
 
+    @pytest.mark.django_db
+    def it_includes_maintainer():
+        test = project.tests.create(
+            name="my-test", disabled_user=admin_user, maintainer=admin_user
+        )
+        payload = json.loads(build_metrics_json(project, [test]))
+        expect(payload["tests"][1]["maintainer"]) == admin_user.email
+
+    @pytest.mark.django_db
+    def it_serializes_empty_maintainer_as_null():
+        test = project.tests.create(name="my-test", disabled_user=admin_user)
+        payload = json.loads(build_metrics_json(project, [test]))
+        expect(payload["tests"][1]["maintainer"]) == None
+
 
 def describe_projects_index(expect, admin_client, organization: Organization):
     index_url = "/projects/"
@@ -339,6 +354,9 @@ def describe_tests(expect):
             expect(response.status_code) == 200
             html = response.content.decode("utf-8")
             expect(html).contains(url.format(pk=disabled_test.pk) + "/export.json")
+            expect(html).contains("Copy Agent URL")
+            expect(html).contains("data-copy-agent-url")
+            expect(html).contains("/export.json?token=")
 
         @pytest.mark.django_db
         def it_downloads_ai_data_json():
@@ -349,7 +367,7 @@ def describe_tests(expect):
             expect(response["Content-Type"]).contains("application/json")
             expect(response["Content-Disposition"]).contains("attachment")
             expect(response["Content-Disposition"]).contains(
-                f"tab-ai-data-foo-bar-test-{disabled_test.pk}.json"
+                f"tab-export-foo-bar-test-{disabled_test.pk}.json"
             )
             body = response.content.decode("utf-8")
             expect(body).contains('"name": "test"')
@@ -361,7 +379,89 @@ def describe_tests(expect):
             html = response.content.decode("utf-8")
             expect(html).contains("AI Data")
             expect(html).contains("Back to Test")
+            expect(html).contains("data-copy-prompt")
+            expect(html).contains("/export.json")
             expect(html).contains("&quot;name&quot;: &quot;test&quot;")
+
+        @pytest.mark.django_db
+        def it_allows_ai_data_access_with_an_agent_token(client):
+            page = url.format(pk=disabled_test.pk) + "/export"
+            token = _generate_export_token()
+
+            preview = client.get(page, {"token": token})
+            expect(preview.status_code) == 200
+            expect(preview["Cache-Control"]) == "private, no-store"
+            expect(preview["Referrer-Policy"]) == "no-referrer"
+            expect(preview.content.decode("utf-8")).contains(
+                f"export.json?token={token}"
+            )
+
+            download = client.get(f"{page}.json", {"token": token})
+            expect(download.status_code) == 200
+
+            metrics = client.get(
+                "/projects/foo/bar/metrics/export.json", {"token": token}
+            )
+            expect(metrics.status_code) == 200
+
+        @pytest.mark.django_db
+        def it_rejects_an_unknown_agent_token(client):
+            response = client.get(
+                url.format(pk=disabled_test.pk) + "/export", {"token": "nope"}
+            )
+            expect(response.status_code) == 302
+
+        @pytest.mark.django_db
+        def it_renders_ai_prompt_preview():
+            result = disabled_test.results.get()
+            result_page = admin_client.get(
+                url.format(pk=disabled_test.pk) + f"/results/{result.pk}"
+            )
+            result_html = result_page.content.decode("utf-8")
+            expect(result_html).contains("Copy Agent URL")
+            expect(result_html).contains("data-copy-agent-url")
+            expect(result_html).contains("/export.md?token=")
+
+            response = admin_client.get(
+                url.format(pk=disabled_test.pk) + f"/results/{result.pk}/export"
+            )
+            expect(response.status_code) == 200
+            html = response.content.decode("utf-8")
+            expect(html).contains("AI Prompt")
+            expect(html).contains("Back to Result")
+            expect(html).contains("data-copy-prompt")
+            expect(html).contains("/export.md")
+            expect(html).contains("## Test identity")
+            expect(html).contains("- Repository: foo/bar")
+
+        @pytest.mark.django_db
+        def it_downloads_ai_prompt_markdown():
+            result = disabled_test.results.get()
+            response = admin_client.get(
+                url.format(pk=disabled_test.pk) + f"/results/{result.pk}/export.md"
+            )
+            expect(response.status_code) == 200
+            expect(response["Content-Type"]).contains("text/plain")
+            expect(response["Content-Disposition"]).contains("attachment")
+            expect(response["Content-Disposition"]).contains(
+                f"tab-export-foo-bar-result-{result.pk}.md"
+            )
+            body = response.content.decode("utf-8")
+            expect(body).contains("## Test identity")
+            expect(body).contains("- Repository: foo/bar")
+
+        @pytest.mark.django_db
+        def it_allows_ai_prompt_access_with_an_agent_token(client):
+            result = disabled_test.results.get()
+            page = url.format(pk=disabled_test.pk) + f"/results/{result.pk}/export"
+            token = _generate_export_token()
+
+            preview = client.get(page, {"token": token})
+            expect(preview.status_code) == 200
+            expect(preview.content.decode("utf-8")).contains(f"export.md?token={token}")
+
+            download = client.get(f"{page}.md", {"token": token})
+            expect(download.status_code) == 200
 
         @pytest.mark.django_db
         def it_updates_override_behavior(mocker, admin_user):
@@ -538,12 +638,20 @@ def describe_results(expect, admin_client):
             commit="abc123",
             status=Status.PASSED,
             duration=1.0,
+            target="desktop",
+            platform="linux",
+            browser="chromium",
         )
 
         response = admin_client.get(url)
         expect(response.status_code) == 200
         html = response.content.decode("utf-8")
         expect(html).contains("(1 result)")
+        expect(html).contains("Environment")
+        expect(html).contains("Desktop, Linux, Chromium")
+        expect(html).excludes(">Target</th>")
+        expect(html).excludes(">Platform</th>")
+        expect(html).excludes(">Browser</th>")
 
     @pytest.mark.django_db
     def it_redirects_platform_search_to_query_param():
@@ -604,6 +712,35 @@ def describe_metrics(expect, admin_client, admin_user, project: Project):
         expect(response.status_code) == 200
         html = response.content.decode("utf-8")
         expect(html).contains(admin_user.email)
+        expect(html).contains("Copy Agent URL")
+        expect(html).contains("data-copy-agent-url")
+        expect(html).contains("/export.json?token=")
+
+    @pytest.mark.django_db
+    def it_assigns_the_current_user_as_maintainer():
+        test = project.tests.create(name="flaky-test")
+
+        response = admin_client.post(
+            f"/projects/foo/bar/metrics/tests/{test.pk}/maintainer",
+            {"action": "assign"},
+        )
+
+        expect(response.status_code) == 302
+        test.refresh_from_db()
+        expect(test.maintainer) == admin_user
+
+    @pytest.mark.django_db
+    def it_clears_the_maintainer():
+        test = project.tests.create(name="flaky-test", maintainer=admin_user)
+
+        response = admin_client.post(
+            f"/projects/foo/bar/metrics/tests/{test.pk}/maintainer",
+            {"action": "clear"},
+        )
+
+        expect(response.status_code) == 302
+        test.refresh_from_db()
+        expect(test.maintainer) == None
 
     @pytest.mark.django_db
     def it_downloads_ai_data_json():
@@ -613,7 +750,7 @@ def describe_metrics(expect, admin_client, admin_user, project: Project):
         expect(response.status_code) == 200
         expect(response["Content-Type"]).contains("application/json")
         expect(response["Content-Disposition"]).contains("attachment")
-        expect(response["Content-Disposition"]).contains("tab-ai-data-foo-bar.json")
+        expect(response["Content-Disposition"]).contains("tab-export-foo-bar.json")
         body = response.content.decode("utf-8")
         expect(body).contains('"name": "foo › bar"')
 
@@ -626,4 +763,6 @@ def describe_metrics(expect, admin_client, admin_user, project: Project):
         html = response.content.decode("utf-8")
         expect(html).contains("AI Data")
         expect(html).contains("Back to Metrics")
+        expect(html).contains("data-copy-prompt")
+        expect(html).contains("/metrics/export.json")
         expect(html).contains("&quot;name&quot;: &quot;foo › bar&quot;")

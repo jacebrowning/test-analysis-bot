@@ -166,11 +166,28 @@ def describe_suite_history(expect):
             suite.save()
             history = SuiteHistory.objects.create_from_suite(suite)
             expect(history.average_setup_duration) == 12.5
+            expect(history.average_tests_duration) == -1
+            expect(history.average_teardown_duration) == -1
             expect(history.suite) == suite
 
         @pytest.mark.django_db
-        def it_skips_redundant_metrics_within_an_hour():
+        def it_copies_tests_and_teardown_averages():
+            suite.average_setup_duration = 12.5
+            suite.average_tests_duration = 40.0
+            suite.average_teardown_duration = 3.0
+            suite.save()
+            history = SuiteHistory.objects.create_from_suite(suite)
+            expect(history.average_setup_duration) == 12.5
+            expect(history.average_tests_duration) == 40.0
+            expect(history.average_teardown_duration) == 3.0
+
+        @pytest.mark.django_db
+        def it_updates_metrics_within_an_hour():
             suite.average_setup_duration = 12.5
             suite.save()
-            SuiteHistory.objects.create_from_suite(suite)
-            expect(SuiteHistory.objects.create_from_suite(suite)) == None
+            first = SuiteHistory.objects.create_from_suite(suite)
+            suite.average_setup_duration = 15.0
+            suite.save()
+            second = SuiteHistory.objects.create_from_suite(suite)
+            expect(second.id) == first.id
+            expect(second.average_setup_duration) == 15.0

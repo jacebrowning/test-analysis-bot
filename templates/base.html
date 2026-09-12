@@ -48,15 +48,20 @@
         {% include "_nav.html" %}
         {% if messages %}
             <div class="container">
-                {% for message in messages %}
-                    <div class="alert {{ message.tags }} alert-dismissible">
-                        {{ message }}
-                        <button type="button"
-                                class="btn-close"
-                                data-bs-dismiss="alert"
-                                aria-label="Close"></button>
+                <div class="row justify-content-center">
+                    <div class="
+                        {% block messages_column_class %}col-12{% endblock messages_column_class %}">
+                        {% for message in messages %}
+                            <div class="alert {{ message.tags }} alert-dismissible">
+                                {{ message }}
+                                <button type="button"
+                                        class="btn-close"
+                                        data-bs-dismiss="alert"
+                                        aria-label="Close"></button>
+                            </div>
+                        {% endfor %}
                     </div>
-                {% endfor %}
+                </div>
             </div>
         {% endif %}
         <main class="container">

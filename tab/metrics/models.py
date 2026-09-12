@@ -85,6 +85,8 @@ class SuiteHistory(models.Model):
     )
 
     average_setup_duration = models.FloatField()
+    average_tests_duration = models.FloatField()
+    average_teardown_duration = models.FloatField()
     timestamp = models.DateTimeField(auto_now_add=True)
 
     objects: SuiteHistoryManager = SuiteHistoryManager()
@@ -230,7 +232,7 @@ class Alert(models.Model):
         url = self.test.url + "?expand=true"
 
         if self.history:
-            text = f"Failure rate increased by {self.history.test.failure_rate_delta:.1%} today"
+            text = f"Failure rate increased by {self.history.test.failure_rate_delta:.0%} today"
             extra = self.history.result.message if self.history.result else None
         elif self.test.disabled_at:
             text = "Manually disabled from blocking merges"

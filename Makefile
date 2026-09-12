@@ -186,8 +186,8 @@ test-e2e: install
 	time ./docs/examples/junit/upload-results.sh || true
 	@ echo
 
-	./manage.py syncdata
-	./manage.py cleandata
+	./manage.py refreshdata
+	./manage.py cleandata --force
 	@ echo
 
 	TAB_API_URL=$${TAB_API_URL:-http://localhost:8000} \

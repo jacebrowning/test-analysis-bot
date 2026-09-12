@@ -121,6 +121,30 @@ def test_denied_oidc_refresh_logs_the_user_out(expect, client):
 
 
 @pytest.mark.django_db
+def test_denied_oidc_refresh_returns_to_the_original_page(expect, client):
+    user = User.objects.create_user(username="oidc", email="oidc@example.com")
+    client.force_login(user, backend="tab.core.auth.AuthentikOIDCBackend")
+    session = client.session
+    session["oidc_id_token_expiration"] = 0
+    session.save()
+
+    refresh_response = client.get("/releases/")
+    state = parse_qs(urlparse(refresh_response["Location"]).query)["state"][0]
+    callback_response = client.get(
+        "/oidc/callback/",
+        {"error": "login_required", "state": state},
+        follow=True,
+    )
+
+    expect(
+        callback_response.redirect_chain[-1][0]
+    ) == "/accounts/login/?next=%2Freleases%2F"
+    expect(callback_response.content.decode()).contains(
+        "/oidc/authenticate/?next=/releases/"
+    )
+
+
+@pytest.mark.django_db
 def test_expired_oidc_sessions_can_log_out(expect, client):
     user = User.objects.create_user(username="oidc", email="oidc@example.com")
     client.force_login(user, backend="tab.core.auth.AuthentikOIDCBackend")

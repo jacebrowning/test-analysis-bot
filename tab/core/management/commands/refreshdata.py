@@ -50,7 +50,9 @@ class Command(BaseCommand):
                         created_at__gte=timezone.now() - timedelta(hours=1),
                         final=True,
                     )
-                    .order_by("commit", "target", "platform", "branch", "-id")
-                    .distinct("commit", "target", "platform", "branch")
+                    .order_by(
+                        "commit", "target", "platform", "browser", "branch", "-id"
+                    )
+                    .distinct("commit", "target", "platform", "browser", "branch")
                 ):
                     result.finalize()

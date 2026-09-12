@@ -107,8 +107,15 @@ def test_export_button(page: Page, live_server, admin_user):
         button.click()
 
     download = download_info.value
-    assert download.suggested_filename == f"tab-ai-data-foo-bar-test-{test.pk}.json"
+    assert download.suggested_filename == f"tab-export-foo-bar-test-{test.pk}.json"
     path = download.path()
     assert path is not None
     body = Path(path).read_text()
     assert '"name": "flaky-test"' in body
+
+    button.locator("xpath=following-sibling::button").click()
+    page.get_by_role("link", name="Preview Content").click()
+    assert page.url.endswith(
+        reverse("projects:test-export-page", args=[project.path, test.id])
+    )
+    assert '"name": "flaky-test"' in page.locator("pre").inner_text()

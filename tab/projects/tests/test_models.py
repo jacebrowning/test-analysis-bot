@@ -70,6 +70,44 @@ def describe_suite(expect):
             expect(suite.update_average_setup_duration()) == True
             expect(suite.average_setup_duration) == 4.0
 
+    def describe_update_average_tests_duration(expect, project: Project):
+        @pytest.mark.django_db
+        def it_computes_average_tests_duration():
+            project.save()
+            suite: Suite = project.suites.create(name="my-suite")
+            now = timezone.now()
+            for seconds in (10, 20, 30):
+                suite.runs.create(
+                    project=project,
+                    branch="main",
+                    commit=f"commit{seconds}",
+                    tests_started_at=now - timedelta(seconds=seconds),
+                    tests_finished_at=now,
+                )
+
+            suite.average_tests_duration = -1
+            expect(suite.update_average_tests_duration()) == True
+            expect(suite.average_tests_duration) == 20.0
+
+    def describe_update_average_teardown_duration(expect, project: Project):
+        @pytest.mark.django_db
+        def it_computes_average_teardown_duration():
+            project.save()
+            suite: Suite = project.suites.create(name="my-suite")
+            now = timezone.now()
+            for seconds in (1, 2, 3):
+                suite.runs.create(
+                    project=project,
+                    branch="main",
+                    commit=f"commit{seconds}",
+                    tests_finished_at=now - timedelta(seconds=seconds),
+                    teardown_finished_at=now,
+                )
+
+            suite.average_teardown_duration = -1
+            expect(suite.update_average_teardown_duration()) == True
+            expect(suite.average_teardown_duration) == 2.0
+
 
 def describe_test(expect):
     @pytest.fixture
@@ -142,6 +180,8 @@ def describe_test(expect):
                 name="my-test",
                 disabled_at=timezone.now() - RESTORATION_THRESHOLD,
                 disabled_user=admin_user,
+                disabled_reason="Waiting on infra.",
+                disabled_tracker="https://example.com/ticket/1",
                 failure_rate=0.25,
             )
             expect(bool(test.disabled_at)) == True
@@ -149,6 +189,8 @@ def describe_test(expect):
             test.failure_rate = 0
             test.save()
             expect(bool(test.disabled_at)) == False
+            expect(test.disabled_reason) == ""
+            expect(test.disabled_tracker) == None
             expect(test.disabled_user) == admin_user
 
         @pytest.mark.django_db
@@ -331,12 +373,14 @@ def describe_result(expect):
                 local_command='make test-e2e-desktop E2E_GREP="my-suite.*{test.name}"',
             )
             disabled_user = User(username="tab_user", email="user@example.com")
+            maintainer = User(username="maintainer", email="maintainer@example.com")
             test = Test(
                 project=project,
                 suite=suite,
                 name="my-test",
                 original_branch="my-branch",
                 original_commit="abc123",
+                maintainer=maintainer,
                 failure_rate=0.099,
                 block_rate=0.088,
                 average_duration=4.2,
@@ -357,6 +401,7 @@ def describe_result(expect):
                 duration=12.3,
                 target=Target.DESKTOP.value,
                 platform=Platform.MACOS.value,
+                browser="Chromium",
                 metadata={
                     "logs": logs,
                     "GITHUB_RUN_ID": "99",
@@ -501,6 +546,29 @@ def describe_result(expect):
                 branch="main",
                 commit="a1",
                 target=Target.DESKTOP.value,
+                final=True,
+            )
+
+            expect(test.results.filter(final=True).count()) == 2
+
+        @pytest.mark.django_db
+        def it_keeps_separate_results_per_browser():
+            project = Project.objects.create(repository="https://github.com/foo/bar")
+            test = project.tests.create(name="my-test")
+            Result.objects.create(
+                test=test,
+                status=Status.PASSED,
+                branch="main",
+                commit="a1",
+                browser="chromium",
+                final=True,
+            )
+            Result.objects.create(
+                test=test,
+                status=Status.PASSED,
+                branch="main",
+                commit="a1",
+                browser="firefox",
                 final=True,
             )
 

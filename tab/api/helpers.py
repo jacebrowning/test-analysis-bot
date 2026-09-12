@@ -14,7 +14,10 @@ from tab.projects.enums import Status
 from tab.projects.models import Project, Result, Suite, Test
 from tab.projects.types import Health
 
-from .constants import TESTS_CACHE_KEY, TESTS_CACHE_TIMEOUT
+from .constants import (
+    TESTS_CACHE_KEY,
+    TESTS_CACHE_TIMEOUT,
+)
 
 
 def parse_junit_xml(
@@ -24,11 +27,14 @@ def parse_junit_xml(
     branch: str,
     commit: str,
     metadata: dict,
-    deferred: bool = False,
+    *,
+    deferred: bool | None = None,
 ) -> list[Result]:
     results = []
 
     xml = ET.fromstring(content)
+    if deferred is None:
+        deferred = sum(1 for _ in xml.iterfind(".//testcase")) > 300
     root_name = xml.get("name", "")
 
     tests_data_to_create: list[dict] = []

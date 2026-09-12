@@ -12,17 +12,31 @@
             <div class="modal-header">
                 <h5 class="modal-title me-auto">Result Details</h5>
                 <div class="d-flex align-items-center gap-3 flex-shrink-0 ms-2">
-                    <button type="button"
-                            class="btn btn-sm btn-outline-secondary"
-                            data-copy-prompt="result-prompt-{{ result.pk }}"
-                            disabled
-                            title="Copy as Markdown">
-                        <span aria-hidden="true">
-                            <i class="fa-regular fa-copy js-copy-prompt-idle"></i>
-                            <i class="fa-solid fa-check js-copy-prompt-done d-none"></i>
-                        </span>
-                        <span class="ms-1 d-none d-sm-inline">AI Prompt</span>
-                    </button>
+                    <div class="btn-group">
+                        <button type="button"
+                                class="btn btn-sm btn-outline-secondary"
+                                data-copy-prompt="result-prompt-{{ result.pk }}"
+                                disabled
+                                title="Copy as Markdown">
+                            <span aria-hidden="true">
+                                <i class="fa-regular fa-copy js-copy-prompt-idle"></i>
+                                <i class="fa-solid fa-check js-copy-prompt-done d-none"></i>
+                            </span>
+                            <span class="ms-1 d-none d-sm-inline">AI Prompt</span>
+                        </button>
+                        <button type="button"
+                                class="btn btn-sm btn-outline-secondary dropdown-toggle dropdown-toggle-split"
+                                data-bs-toggle="dropdown"
+                                aria-expanded="false">
+                            <span class="visually-hidden">Toggle Dropdown</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li>
+                                <a class="dropdown-item small"
+                                   href="{% url 'projects:result-export-page' result.test.project.path result.test.id result.pk %}">Preview Content<i class="fa-solid fa-arrow-right ms-2" aria-hidden="true"></i></a>
+                            </li>
+                        </ul>
+                    </div>
                     <button type="button"
                             class="btn-close"
                             data-bs-dismiss="modal"

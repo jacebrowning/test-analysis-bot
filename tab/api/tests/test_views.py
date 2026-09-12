@@ -1,9 +1,13 @@
 import json
 from pathlib import Path
 
+from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
+
 import log
 import pytest
 
+from tab.api.constants import TESTS_CACHE_KEY
 from tab.core.models import Organization
 from tab.projects.models import Result, Test
 
@@ -153,6 +157,21 @@ def describe_bulk_results(expect, client):
         expect(result.metadata) == {"EXTRA": "foobar", "suite": "unit"}
 
     @pytest.mark.django_db
+    def it_defers_large_reports_with_self_closing_testcases(payload):
+        cache.delete(TESTS_CACHE_KEY)
+        testcases = "".join(f'<testcase name="test-{index}" />' for index in range(301))
+        content = f"<testsuites><testsuite>{testcases}</testsuite></testsuites>"
+        payload["tests"] = SimpleUploadedFile("junit.xml", content.encode())
+
+        response = post_form(client, url, payload)
+
+        expect(response.status_code) == 200
+        expect(response.json()["tests"]) == 301
+        expect(cache.get(TESTS_CACHE_KEY)) == set(
+            Test.objects.values_list("id", flat=True)
+        )
+
+    @pytest.mark.django_db
     def it_requires_tests_as_file_upload(payload):
         del payload["tests"]
         response = post_form(client, url, payload)
@@ -174,8 +193,9 @@ def describe_share(expect, client):
             "commit": "abc123",
         }
 
+    @pytest.mark.parametrize("post", [post_json, post_form], ids=["json", "form"])
     @pytest.mark.django_db
-    def it_updates_status(payload, mocker):
+    def it_updates_status(payload, mocker, post):
         mock_github = mocker.patch("tab.core.models.Github")
         mock_repo = mock_github.return_value.get_repo.return_value
         mock_commit = mock_repo.get_commit.return_value
@@ -188,7 +208,7 @@ def describe_share(expect, client):
             repository_token="fake-token",
         )
 
-        response = post_json(client, url, payload)
+        response = post(client, url, payload)
 
         expect(response.status_code) == 200
         expect(response.json()) == {
@@ -212,12 +232,13 @@ def describe_share(expect, client):
             "my-user/my-project",
         ],
     )
+    @pytest.mark.parametrize("post", [post_json, post_form], ids=["json", "form"])
     @pytest.mark.django_db
-    def it_rejects_invalid_repositories(payload, project):
+    def it_rejects_invalid_repositories(payload, project, post):
         Organization.objects.create(name="MyOrganization", key="fake-api-key")
 
         payload["project"] = project
-        response = post_json(client, url, payload)
+        response = post(client, url, payload)
 
         expect(response.status_code) == 422
         expect(response.json()) == {
