@@ -4,6 +4,7 @@ from datetime import timezone as dt_timezone
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.contrib.humanize.templatetags.humanize import naturaltime
 from django.urls import reverse
 from django.utils import timezone
 
@@ -345,6 +346,89 @@ def describe_tests(expect):
         expect(response.status_code) == 302
         expect(response.url) == f"{url}?search=foobar&tag=fixme"
 
+    @pytest.fixture
+    def suite(project: Project):
+        suite = Suite.objects.create(
+            project=project,
+            name="e2e",
+            local_command=(
+                'npm install\n\n# then\n\nnpm run test:e2e -- --grep="{test.name}"'
+            ),
+        )
+        suite.history.create(
+            average_setup_duration=12.0,
+            average_tests_duration=40.0,
+            average_teardown_duration=3.0,
+        )
+        return suite
+
+    @pytest.mark.django_db
+    def it_renders_suite_duration_history(admin_client, suite: Suite):
+        response = admin_client.get(f"/projects/foo/bar/suite/{suite.pk}")
+
+        expect(response.status_code) == 200
+        html = response.content.decode("utf-8")
+        expect(html).contains("Troubleshooting")
+        expect(html).contains("Suite Duration History")
+        expect(html).contains('"tests_duration": 40.0')
+
+    @pytest.mark.django_db
+    def it_hides_suite_duration_history_without_data(admin_client, project: Project):
+        suite = Suite.objects.create(project=project, name="e2e")
+
+        html = admin_client.get(f"/projects/foo/bar/suite/{suite.pk}").content.decode(
+            "utf-8"
+        )
+
+        expect(html).contains("Troubleshooting")
+        expect(html).excludes("Suite Duration History")
+
+    @pytest.mark.django_db
+    def it_hides_troubleshooting_when_empty(
+        client, project: Project, django_user_model
+    ):
+        suite = Suite.objects.create(project=project, name="e2e")
+        user = django_user_model.objects.create_user(username="jane")
+        client.force_login(user)
+
+        html = client.get(f"/projects/foo/bar/suite/{suite.pk}").content.decode("utf-8")
+
+        expect(html).excludes("Troubleshooting")
+        expect(html).excludes("Suite Duration History")
+        expect(html).excludes("Rerun Locally")
+
+    @pytest.mark.django_db
+    def it_renders_commands_that_run_without_a_test(admin_client, suite: Suite):
+        html = admin_client.get(f"/projects/foo/bar/suite/{suite.pk}").content.decode(
+            "utf-8"
+        )
+
+        expect(html).contains("Rerun Locally")
+        expect(html).contains("npm run test:e2e")
+        expect(html).excludes("--grep")
+
+    @pytest.mark.django_db
+    def it_hides_local_commands_from_other_users(
+        client, suite: Suite, django_user_model
+    ):
+        user = django_user_model.objects.create_user(username="jane")
+        client.force_login(user)
+
+        html = client.get(f"/projects/foo/bar/suite/{suite.pk}").content.decode("utf-8")
+
+        expect(html).contains("Suite Duration History")
+        expect(html).excludes("Edit in admin")
+
+    @pytest.mark.django_db
+    def it_expands_troubleshooting_on_request(admin_client, suite: Suite):
+        url = f"/projects/foo/bar/suite/{suite.pk}"
+
+        html = admin_client.get(url).content.decode("utf-8")
+        expect(html).excludes('mb-4" open>')
+
+        html = admin_client.get(f"{url}?expand=true").content.decode("utf-8")
+        expect(html).contains('mb-4" open>')
+
     def describe_details(expect, admin_client, disabled_test: Test):
         url = "/projects/foo/bar/tests/{pk}"
 
@@ -357,6 +441,85 @@ def describe_tests(expect):
             expect(html).contains("Copy Agent URL")
             expect(html).contains("data-copy-agent-url")
             expect(html).contains("/export.json?token=")
+            expect(html).contains("Maintainer")
+            expect(html).contains("Assign to me")
+
+        @pytest.mark.django_db
+        def it_renders_target_and_browser_filter_options():
+            html = admin_client.get(url.format(pk=disabled_test.pk)).content.decode(
+                "utf-8"
+            )
+            expect(html).contains("Filter Results")
+            expect(html).contains(">Target</h6>")
+            expect(html).contains(">Browser</h6>")
+            expect(html).contains("target=web")
+            expect(html).contains("target=desktop")
+            expect(html).contains("browser=chrome")
+            expect(html).contains("browser=firefox")
+
+        @pytest.mark.django_db
+        def it_filters_results_by_target_and_browser():
+            disabled_test.results.create(
+                branch="main",
+                commit="web1111",
+                status=Status.PASSED,
+                duration=1.0,
+                target="web",
+                browser="Chrome",
+            )
+            disabled_test.results.create(
+                branch="main",
+                commit="desk222",
+                status=Status.PASSED,
+                duration=1.0,
+                target="desktop",
+                browser="Firefox",
+            )
+            test_url = url.format(pk=disabled_test.pk)
+            html = admin_client.get(
+                f"{test_url}?target=web&browser=chrome"
+            ).content.decode("utf-8")
+            expect(html).contains("web1111")
+            expect(html).excludes("desk222")
+            expect(html).contains("target:web")
+            expect(html).contains("browser:chrome")
+            expect(html).excludes("browser:Chrome")
+            expect(html).contains(f"{test_url}?browser=chrome")
+            expect(html).contains(f"{test_url}?target=web")
+
+        @pytest.mark.django_db
+        def it_assigns_the_current_user_as_maintainer(admin_user):
+            test_url = url.format(pk=disabled_test.pk)
+
+            response = admin_client.post(
+                f"/projects/foo/bar/metrics/tests/{disabled_test.pk}/maintainer",
+                {"action": "assign", "next": test_url},
+            )
+
+            expect(response.status_code) == 302
+            expect(response.url) == test_url
+            disabled_test.refresh_from_db()
+            expect(disabled_test.maintainer) == admin_user
+
+            html = admin_client.get(test_url).content.decode("utf-8")
+            expect(html).contains(admin_user.email)
+            expect(html).contains("Clear maintainer")
+
+        @pytest.mark.django_db
+        def it_clears_the_maintainer(admin_user):
+            disabled_test.maintainer = admin_user
+            disabled_test.save()
+            test_url = url.format(pk=disabled_test.pk)
+
+            response = admin_client.post(
+                f"/projects/foo/bar/metrics/tests/{disabled_test.pk}/maintainer",
+                {"action": "clear", "next": test_url},
+            )
+
+            expect(response.status_code) == 302
+            expect(response.url) == test_url
+            disabled_test.refresh_from_db()
+            expect(disabled_test.maintainer) == None
 
         @pytest.mark.django_db
         def it_downloads_ai_data_json():
@@ -567,6 +730,36 @@ def describe_tests(expect):
             expect(response.status_code) == 200
             html = response.content.decode("utf-8")
             expect(html).contains("1 Disabled Test")
+            expect(html).contains("Typically Fails")
+            expect(html).contains("Disabled")
+            expect(html).contains("Reason")
+            expect(html).contains("Tracker")
+            expect(html).contains(str(naturaltime(disabled_test.disabled_at)))  # type: ignore [arg-type]
+            expect(html).excludes("Last Updated")
+
+        @pytest.mark.django_db
+        def it_shortens_github_issue_tracker_labels(
+            admin_client, project: Project, disabled_test: Test
+        ):
+            disabled_test.disabled_tracker = f"{project.repository}/issues/1"
+            disabled_test.save()
+            other = Test.objects.create(project=project, name="other disabled")
+            other.results.create(
+                branch="main",
+                commit="abc123",
+                status=Status.PASSED,
+                duration=1.0,
+            )
+            other.disabled_at = timezone.now()
+            other.disabled_tracker = "https://github.com/foo/other/issues/99"
+            other.save()
+
+            response = admin_client.get(url)
+            expect(response.status_code) == 200
+            html = response.content.decode("utf-8")
+            expect(html).contains(">issues/1</a>")
+            expect(html).contains(">other/issues/99</a>")
+            expect(html).excludes(">https://github.com/foo/other/issues/99</a>")
 
         @pytest.mark.django_db
         def it_filters_to_provided_preselect_ids_and_disables_search(
@@ -648,10 +841,23 @@ def describe_results(expect, admin_client):
         html = response.content.decode("utf-8")
         expect(html).contains("(1 result)")
         expect(html).contains("Environment")
-        expect(html).contains("Desktop, Linux, Chromium")
+        expect(html).contains("Desktop, Linux, Chrome")
         expect(html).excludes(">Target</th>")
         expect(html).excludes(">Platform</th>")
         expect(html).excludes(">Browser</th>")
+
+    @pytest.mark.django_db
+    def it_hides_suite_troubleshooting(admin_client, project: Project):
+        suite = Suite.objects.create(
+            project=project,
+            name="e2e",
+            local_command="npm run test:e2e",
+        )
+        Test.objects.create(project=project, name="test", suite=suite)
+
+        html = admin_client.get(f"{url}/suite/{suite.pk}").content.decode("utf-8")
+        expect(html).excludes("Troubleshooting")
+        expect(html).excludes("Rerun Locally")
 
     @pytest.mark.django_db
     def it_redirects_platform_search_to_query_param():
@@ -717,6 +923,27 @@ def describe_metrics(expect, admin_client, admin_user, project: Project):
         expect(html).contains("/export.json?token=")
 
     @pytest.mark.django_db
+    def it_uses_field_help_text_as_column_tooltips():
+        test = project.tests.create(
+            name="flaky-test", failure_rate=0.5, disabled_user=admin_user
+        )
+        result = test.results.create(
+            branch="main", commit="abc123", status=Status.FAILED, duration=1.0
+        )
+        Test.objects.filter(pk=test.pk).update(
+            created_at=timezone.now() - timedelta(days=8),
+            last_result=result,
+            failure_rate=0.5,
+        )
+
+        html = admin_client.get(url).content.decode("utf-8")
+        expect(html).contains(Test._meta.get_field("maintainer").help_text)
+        expect(html).contains(Test._meta.get_field("failure_rate").help_text)
+        expect(html).contains(Test._meta.get_field("block_rate").help_text)
+        expect(html).contains(Test._meta.get_field("average_duration").help_text)
+        expect(html).contains(Test._meta.get_field("disabled_user").help_text)
+
+    @pytest.mark.django_db
     def it_assigns_the_current_user_as_maintainer():
         test = project.tests.create(name="flaky-test")
 
@@ -726,6 +953,7 @@ def describe_metrics(expect, admin_client, admin_user, project: Project):
         )
 
         expect(response.status_code) == 302
+        expect(response.url) == url
         test.refresh_from_db()
         expect(test.maintainer) == admin_user
 
@@ -739,8 +967,21 @@ def describe_metrics(expect, admin_client, admin_user, project: Project):
         )
 
         expect(response.status_code) == 302
+        expect(response.url) == url
         test.refresh_from_db()
         expect(test.maintainer) == None
+
+    @pytest.mark.django_db
+    def it_rejects_an_unsafe_maintainer_redirect():
+        test = project.tests.create(name="flaky-test")
+
+        response = admin_client.post(
+            f"/projects/foo/bar/metrics/tests/{test.pk}/maintainer",
+            {"action": "assign", "next": "https://evil.example/phish"},
+        )
+
+        expect(response.status_code) == 302
+        expect(response.url) == url
 
     @pytest.mark.django_db
     def it_downloads_ai_data_json():

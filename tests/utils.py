@@ -35,6 +35,21 @@ def force_login(page: Page, live_server: LiveServer, user: User):
     )
 
 
+def wait_for_chart(page: Page, canvas_id: str, *, dataset: int = 0, index: int = 0):
+    """Wait for a chart to stop animating so hovers land on final point positions."""
+    page.wait_for_function(
+        """([id, dataset, index]) => {
+            const chart = Chart.getChart(id);
+            if (!chart) return false;
+            const y = chart.getDatasetMeta(dataset).data[index].y;
+            const settled = window.__chartPointY === y;
+            window.__chartPointY = y;
+            return settled;
+        }""",
+        arg=[canvas_id, dataset, index],
+    )
+
+
 def take_snapshot(page: Page, name: str):
     baseline_path = SNAPSHOT_DIR / f"{name}.png"
     baseline_path.parent.mkdir(parents=True, exist_ok=True)

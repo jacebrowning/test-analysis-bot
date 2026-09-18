@@ -35,7 +35,7 @@
             </div>
         </div>
         {% if suite_id or suites|length > 1 %}
-            <ul class="nav nav-tabs mb-3">
+            <ul class="nav nav-tabs suite-tabs mb-3">
                 <li class="nav-item">
                     <a class="nav-link {% if not suite_id %}active{% endif %}"
                        href="{% url 'projects:tests' project.path %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}">All Suites</a>
@@ -47,6 +47,9 @@
                     </li>
                 {% endfor %}
             </ul>
+        {% endif %}
+        {% if suite %}
+            {% include "projects/_suite_troubleshooting.html" %}
         {% endif %}
         <form method="get" class="mb-4">
             <div class="input-group mb-3">

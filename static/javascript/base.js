@@ -101,4 +101,29 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
         });
     });
+
+    document.querySelectorAll('.suite-tabs').forEach(function (tabs) {
+        function updateFades() {
+            const hiddenWidth = tabs.scrollWidth - tabs.clientWidth;
+            tabs.classList.toggle('suite-tabs-fade-start', tabs.scrollLeft > 1);
+            tabs.classList.toggle(
+                'suite-tabs-fade-end',
+                tabs.scrollLeft < hiddenWidth - 1
+            );
+        }
+
+        const active = tabs.querySelector('.nav-link.active');
+        if (active) {
+            const tabsRect = tabs.getBoundingClientRect();
+            const activeRect = active.getBoundingClientRect();
+            tabs.scrollLeft +=
+                activeRect.left -
+                tabsRect.left -
+                (tabsRect.width - activeRect.width) / 2;
+        }
+
+        updateFades();
+        tabs.addEventListener('scroll', updateFades);
+        window.addEventListener('resize', updateFades);
+    });
 });

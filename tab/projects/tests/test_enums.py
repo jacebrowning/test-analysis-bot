@@ -85,7 +85,7 @@ def describe_platform(expect):
 
 def describe_browser(expect):
     def it_capitalizes_known_names():
-        expect(Browser.normalize("chromium")) == "Chromium"
+        expect(Browser.normalize("chromium")) == "Chrome"
         expect(Browser.normalize("CHROME")) == "Chrome"
         expect(Browser.normalize("firefox")) == "Firefox"
         expect(Browser.normalize("webkit")) == "WebKit"
@@ -95,3 +95,12 @@ def describe_browser(expect):
     def it_leaves_unknown_names_unchanged():
         expect(Browser.normalize("chrome-beta")) == "chrome-beta"
         expect(Browser.normalize("MyHeadless")) == "MyHeadless"
+
+    def it_lists_lowercase_values_with_display_labels():
+        expect(Browser.choices()) == [
+            ("chrome", "Chrome"),
+            ("edge", "Edge"),
+            ("firefox", "Firefox"),
+            ("safari", "Safari"),
+            ("webkit", "WebKit"),
+        ]

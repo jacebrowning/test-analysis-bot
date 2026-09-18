@@ -27,7 +27,7 @@ class BaseUpdateTestForm(forms.Form):
         required=False,
         disabled=True,
         label="Your Email",
-        help_text="Person who last updated this override behavior",
+        help_text=Test._meta.get_field("disabled_user").help_text,
     )
 
 

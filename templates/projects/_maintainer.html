@@ -1,0 +1,28 @@
+{% if test.maintainer %}
+    <div class="d-inline-flex align-items-center text-nowrap">
+        <span>{{ test.maintainer.email }}</span>
+        <form method="post"
+              action="{% url 'projects:test-maintainer' project.path test.id %}"
+              class="d-inline"
+              onsubmit="return confirm('Clear this test maintainer?');">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="clear">
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit"
+                    class="btn btn-sm btn-link text-danger p-1"
+                    title="Clear maintainer"
+                    aria-label="Clear maintainer">
+                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+            </button>
+        </form>
+    </div>
+{% else %}
+    <form method="post"
+          action="{% url 'projects:test-maintainer' project.path test.id %}"
+          class="d-inline">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="assign">
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button type="submit" class="btn btn-sm btn-outline-secondary text-nowrap">Assign to me</button>
+    </form>
+{% endif %}

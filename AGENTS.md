@@ -7,6 +7,7 @@
 - Integration / Django DB + Playwright UI: `make test-integration`
 - Unit: `make test-unit`
 - Do not invent custom database drop/terminate sequences or one-off pytest flags unless the Makefile path is broken.
+- The user may have `make dev` running, which holds the test database. If pytest fails because `test_test_analysis_bot` already exists or is being accessed by other users, wait for `make dev` to stop using it and retry. Do not kill sessions or drop the database yourself.
 
 ## UI snapshots
 

@@ -1,0 +1,109 @@
+{% if suite_duration_history or suite.command or suite_admin_url %}
+    <details class="suite-troubleshooting mb-4" {% if expand %}open{% endif %}>
+        <summary class="suite-troubleshooting-summary">
+            <h6 class="card-title mb-0">Troubleshooting</h6>
+            <i class="fa-solid fa-chevron-right fa-sm text-muted ms-auto suite-troubleshooting-chevron"
+               aria-hidden="true"></i>
+        </summary>
+        <div class="suite-troubleshooting-body">
+            {% if suite_duration_history %}
+                {% include "projects/_suite_duration_history.html" %}
+            {% endif %}
+            {% if suite.command or suite_admin_url %}
+                <div class="card {% if suite_duration_history %}mt-4 {% endif %}border-dark">
+                    <div class="card-header py-3 bg-dark text-white d-flex justify-content-between align-items-center">
+                        <h6 class="m-0 font-weight-bold">
+                            <i class="fa-solid fa-play-circle me-2" aria-hidden="true"></i>
+                            Rerun Locally
+                        </h6>
+                        {% if suite_admin_url %}
+                            <a href="{{ suite_admin_url }}"
+                               target="_blank"
+                               class="text-danger"
+                               title="Edit in admin">
+                                <i class="fa-solid fa-table"></i>
+                            </a>
+                        {% endif %}
+                    </div>
+                    <div class="bg-light text-dark p-3 rounded-bottom command">
+                        {% for line, copyable in suite.command %}
+                            <div class="d-flex align-items-center mb-1">
+                                <pre class="mb-0 flex-grow-1 font-monospace"><code>{% if copyable %}<span class="text-success prompt">$ </span>{% endif %}{% if not copyable %}<span class="text-muted">{% endif %}{{ line }}{% if not copyable %}</span>{% endif %}</code></pre>
+                                {% if copyable %}
+                                    <button class="btn btn-sm btn-outline-secondary ms-2 copy-btn"
+                                            data-clipboard-text="{{ line }}"
+                                            title="Copy Line">
+                                        <i class="fa-regular fa-copy"></i>
+                                    </button>
+                                {% endif %}
+                            </div>
+                        {% empty %}
+                            <p class="text-muted mb-0">No local commands are defined for this test suite.</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </details>
+    <style>
+    .suite-troubleshooting {
+        border: 1px solid var(--bs-border-color);
+        border-radius: var(--bs-border-radius);
+    }
+    .suite-troubleshooting-summary {
+        display: flex;
+        align-items: center;
+        padding: 0.5rem 0.75rem;
+        border-radius: calc(var(--bs-border-radius) - 1px);
+        background-color: var(--bs-tertiary-bg);
+        cursor: pointer;
+        list-style: none;
+    }
+    .suite-troubleshooting[open] .suite-troubleshooting-summary {
+        border-bottom: 1px solid var(--bs-border-color);
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+    }
+    .suite-troubleshooting-body {
+        padding: 1rem;
+    }
+    .suite-troubleshooting-summary::-webkit-details-marker {
+        display: none;
+    }
+    .suite-troubleshooting-summary:hover {
+        background-color: var(--bs-secondary-bg);
+    }
+    .suite-troubleshooting-chevron {
+        display: inline-block;
+        width: 1em;
+        text-align: center;
+        transition: transform 0.15s ease-in-out;
+    }
+    .suite-troubleshooting[open] .suite-troubleshooting-chevron {
+        transform: rotate(90deg);
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .suite-troubleshooting-chevron {
+            transition: none;
+        }
+    }
+    .suite-troubleshooting .prompt {
+        user-select: none;
+    }
+    .suite-troubleshooting .command pre {
+        position: relative;
+        overflow: hidden;
+        padding-right: 20px; /* Fade before the copy */
+    }
+    .suite-troubleshooting .command pre::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 20px; /* Fade before the copy */
+        height: 100%;
+        background: linear-gradient(to right, transparent, #f8f9fa);
+        pointer-events: none;
+    }
+    </style>
+{% endif %}

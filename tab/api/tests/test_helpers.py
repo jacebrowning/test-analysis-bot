@@ -108,3 +108,50 @@ def describe_parse_junit_xml(expect):
         expect(result.message).contains("    @requires_engine\n")
         expect(result.message).contains("    @pytest.mark.asyncio\n")
         expect(result.message).contains("    async def test_")
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize("deferred", [False, True])
+    def it_parses_tags_from_testcase_properties(deferred):
+        content = """
+        <testsuites>
+          <testsuite name="suite">
+            <testcase name="tagged" classname="mod">
+              <properties>
+                <property name="tag" value="@slow"/>
+                <property name="tag" value="@slow"/>
+                <property name="tag" value="@flaky"/>
+                <property name="tag" value=""/>
+                <property name="tags" value="foo,bar"/>
+              </properties>
+            </testcase>
+            <testcase name="untagged" classname="mod"/>
+          </testsuite>
+        </testsuites>
+        """
+        project = Project.objects.create(repository="https://github.com/foo/bar")
+        suite = Suite.objects.create(project=project)
+        shared = {"EXTRA": "foobar", "tags": ["existing"]}
+
+        results = parse_junit_xml(
+            content,
+            project,
+            suite,
+            branch="main",
+            commit="abc123",
+            metadata=shared,
+            deferred=deferred,
+        )
+
+        by_name = {r.test.name: r for r in results}
+        tagged = by_name["suite › mod › tagged"]
+        untagged = by_name["suite › mod › untagged"]
+        expect(tagged.metadata["tags"]) == [
+            "existing",
+            "@slow",
+            "@flaky",
+            "foo",
+            "bar",
+        ]
+        expect(tagged.metadata["EXTRA"]) == "foobar"
+        expect(untagged.metadata) == {"EXTRA": "foobar", "tags": ["existing"]}
+        expect(shared) == {"EXTRA": "foobar", "tags": ["existing"]}

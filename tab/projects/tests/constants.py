@@ -50,7 +50,7 @@ _This turns blocking failures into a non-blocking status to let PRs merge._
 - Commit: abc123
 - Target: Desktop
 - Platform: macOS
-- Browser: Chromium
+- Browser: Chrome
 - New failure: true
 
 _New failure: History data indicates the test is only blocking this branch._

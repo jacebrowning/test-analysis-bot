@@ -173,14 +173,21 @@ class DisabledTestTable(tables.Table):
             },
         },
     )
-    disabled_reason = tables.Column(verbose_name="Reason Disabled")
+    disabled_at = tables.Column(
+        verbose_name="Disabled",
+        attrs={
+            "th": {
+                "title": Test._meta.get_field("disabled_at").help_text,
+            },
+        },
+    )
+    disabled_reason = tables.Column(verbose_name="Reason")
     disabled_tracker = tables.Column(
         verbose_name="Tracker",
         attrs={
             "a": {"target": "_blank", "rel": "noopener noreferrer"},
         },
     )
-    disabled_user = tables.Column(verbose_name="Last Updated")
 
     class Meta:
         model = Test
@@ -189,9 +196,9 @@ class DisabledTestTable(tables.Table):
             "select",
             "name",
             "failure_rate",
+            "disabled_at",
             "disabled_reason",
             "disabled_tracker",
-            "disabled_user",
         )
         order_by = "name"
 
@@ -226,18 +233,27 @@ class DisabledTestTable(tables.Table):
             )
         return record.failure_rate_humanized
 
+    def render_disabled_at(self, value, record: Test):
+        parts = []
+        if value:
+            timestamp = value.strftime("%Y-%m-%d %H:%M")
+            parts.append(
+                f'<span class="text-nowrap" title="{timestamp}">{naturaltime(value)}</span>'
+            )
+        if record.disabled_user:
+            parts.append(
+                f'<div class="text-muted small">{escape(record.disabled_user.email)}</div>'
+            )
+        return mark_safe("".join(parts))
+
     def render_disabled_tracker(self, value: str, record: Test):
         if not value:
             return ""
-        label = value.removeprefix(record.project.repository).strip("/")
+        href = escape(value)
         return mark_safe(
-            f'<a href="{value}" target="_blank" rel="noopener noreferrer">{label}</a>'
+            f'<a href="{href}" target="_blank" rel="noopener noreferrer">'
+            f"{escape(record.disabled_tracker_humanized)}</a>"
         )
-
-    def render_disabled_user(self, value):
-        if not value:
-            return ""
-        return value.email
 
 
 class TestResultTable(tables.Table):

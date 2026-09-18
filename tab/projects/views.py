@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.generic import FormView, ListView, TemplateView
 
@@ -22,7 +23,7 @@ from tab.metrics.constants import DELTA_THRESHOLD
 from tab.metrics.models import Alert
 
 from .constants import ALL_BRANCHES, FAILURE_RATE_EPSILON
-from .enums import Platform
+from .enums import Browser, Platform, Target
 from .forms import BulkUpdateTestForm, UpdateTestForm
 from .helpers import (
     EXPORT_TOKEN_PARAM,
@@ -33,6 +34,30 @@ from .helpers import (
 )
 from .models import Project, Result, Run, Status, Test
 from .tables import DisabledTestTable, ResultTable, TestResultTable, TestTable
+
+
+def _query_url(base: str, params, *, drop: str | None = None, **updates) -> str:
+    query = params.copy()
+    if drop:
+        query.pop(drop, None)
+    for key, value in updates.items():
+        query[key] = value
+    encoded = query.urlencode()
+    return f"{base}?{encoded}" if encoded else base
+
+
+def _filter_menu_section(base: str, params, heading: str, choices):
+    param = heading.lower()
+    links = [
+        (label, _query_url(base, params, **{param: value}), value)
+        for value, label in choices
+    ]
+    return {
+        "heading": heading,
+        "param": param,
+        "current": (params.get(param) or "").strip(),
+        "links": links,
+    }
 
 
 class IndexView(LoginRequiredMixin, TemplateView):
@@ -147,6 +172,16 @@ class TestsView(LoginRequiredMixin, SingleTableMixin, SearchLabelMixin, ListView
         context["search"] = self.request.GET.get("search", "").strip()
         context["tag"] = self.request.GET.get("tag", "").strip()
         context["enabled"] = self.request.GET.get("enabled", "true")
+        if context["suite_id"] and (
+            suite := project.suites.filter(id=context["suite_id"]).first()
+        ):
+            context["suite"] = suite
+            context["expand"] = self.request.GET.get("expand") == "true"
+            context["suite_duration_history"] = suite.history.get_data(suite, weeks=26)
+            if self.request.user.is_staff:
+                context["suite_admin_url"] = reverse(
+                    "admin:projects_suite_change", args=[suite.pk]
+                )
         if self.request.user.is_staff:
             context["admin_url"] = reverse(
                 "admin:projects_project_change", args=[project.pk]
@@ -451,10 +486,16 @@ class TestResultsView(LoginRequiredMixin, SingleTableMixin, FormView):
 
         branch = self.request.GET.get("branch")
         platform = self.request.GET.get("platform")
+        target = self.request.GET.get("target")
+        browser = self.request.GET.get("browser")
 
         queryset = Result.objects.filter_with_default_branches(test, branch)
         if platform:
             queryset = queryset.filter(platform=platform)
+        if target:
+            queryset = queryset.filter(target=target)
+        if browser:
+            queryset = queryset.filter(browser__iexact=browser)
 
         return queryset
 
@@ -466,7 +507,10 @@ class TestResultsView(LoginRequiredMixin, SingleTableMixin, FormView):
         )
         test = get_object_or_404(
             Test.objects.select_related(
-                "suite", "suite__parent", "suite__parent__project"
+                "suite",
+                "suite__parent",
+                "suite__parent__project",
+                "maintainer",
             ).prefetch_related("suite__children", "suite__parent__children"),
             project=project,
             id=self.kwargs["test_id"],
@@ -495,6 +539,8 @@ class TestResultsView(LoginRequiredMixin, SingleTableMixin, FormView):
         context["expand"] = expand
         context["branch"] = self.request.GET.get("branch")
         context["platform"] = self.request.GET.get("platform", "").strip()
+        context["target"] = self.request.GET.get("target", "").strip()
+        context["browser"] = self.request.GET.get("browser", "").strip()
         context["history_data"] = test.history.get_data(test, weeks)
 
         for field in test._meta.get_fields():
@@ -515,39 +561,38 @@ class TestResultsView(LoginRequiredMixin, SingleTableMixin, FormView):
                 "test_id": test.id,
             },
         )
-        params_all = self.request.GET.copy()
-        params_all["branch"] = "all"
-        context["view_all_branches_url"] = (
-            test_results_base + "?" + params_all.urlencode()
+        params = self.request.GET.copy()
+        context["view_all_branches_url"] = _query_url(
+            test_results_base, params, branch="all"
+        )
+        context["clear_branch_filter_url"] = _query_url(
+            test_results_base, params, drop="branch"
+        )
+        context["clear_platform_filter_url"] = _query_url(
+            test_results_base, params, drop="platform"
+        )
+        context["clear_target_filter_url"] = _query_url(
+            test_results_base, params, drop="target"
+        )
+        context["clear_browser_filter_url"] = _query_url(
+            test_results_base, params, drop="browser"
         )
 
-        clear_branch_q = self.request.GET.copy()
-        clear_branch_q.pop("branch", None)
-        context["clear_branch_filter_url"] = (
-            f"{test_results_base}?{clear_branch_q.urlencode()}"
-            if clear_branch_q
-            else test_results_base
-        )
-        clear_platform_q = self.request.GET.copy()
-        clear_platform_q.pop("platform", None)
-        context["clear_platform_filter_url"] = (
-            f"{test_results_base}?{clear_platform_q.urlencode()}"
-            if clear_platform_q
-            else test_results_base
-        )
-
-        platform_filter_links: list[tuple[str, str, str]] = []
-        for plat, label in Platform.choices:
-            p = self.request.GET.copy()
-            p["platform"] = plat
-            platform_filter_links.append(
-                (label, f"{test_results_base}?{p.urlencode()}", plat)
-            )
-        context["platform_filter_links"] = platform_filter_links
+        context["filter_menu_sections"] = [
+            _filter_menu_section(
+                test_results_base, params, "Platform", Platform.choices
+            ),
+            _filter_menu_section(test_results_base, params, "Target", Target.choices),
+            _filter_menu_section(
+                test_results_base, params, "Browser", Browser.choices()
+            ),
+        ]
         context["show_filter_results_menu"] = (
             context["branch"] != ALL_BRANCHES
-            or bool(platform_filter_links)
+            or any(section["links"] for section in context["filter_menu_sections"])
             or bool(context["platform"])
+            or bool(context["target"])
+            or bool(context["browser"])
         )
         context["download_url"] = tokenize(
             self.request,
@@ -768,6 +813,13 @@ class TestMaintainerView(LoginRequiredMixin, View):
             return HttpResponse("Invalid maintainer action", status=400)
 
         test.save(update_fields=["maintainer", "updated_at"])
+        next_url = request.POST.get("next")
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        ):
+            return redirect(next_url)
         return redirect("projects:metrics", path=project.path)
 
 
@@ -785,6 +837,9 @@ class MetricsView(LeastReliableTestsMixin, LoginRequiredMixin, TemplateView):
         tests_sorted = self._least_reliable_tests(project)
         context["least_reliable_tests"] = tests_sorted
         context["disabled_test_metrics"] = get_disabled_test_metrics(project)
+        for field in Test._meta.get_fields():
+            if hasattr(field, "help_text") and field.help_text:
+                context[f"{field.name}_help"] = field.help_text
         context["download_url"] = tokenize(
             self.request,
             reverse("projects:metrics-export", args=[project.path]),

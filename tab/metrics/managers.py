@@ -118,3 +118,37 @@ class SuiteHistoryManager(models.Manager):
             log.debug(f"Deleted {count} old suite metrics")
 
         return history
+
+    def get_data(self, suite: Suite, weeks: float) -> list[dict]:
+        cutoff = timezone.now() - timedelta(weeks=weeks)
+        histories = self.filter(
+            timestamp__gte=cutoff, average_tests_duration__gte=0
+        ).order_by("timestamp")
+        data = [
+            self._point(history.timestamp, history)
+            for history in cast(list["SuiteHistory"], histories)
+        ]
+        if not data and suite.average_tests_duration >= 0:
+            data.append(self._point(timezone.now(), suite))
+        return data
+
+    @staticmethod
+    def _point(timestamp, source: "SuiteHistory" | Suite) -> dict:
+        return {
+            "date": timestamp.isoformat(),
+            "setup_duration": (
+                None
+                if source.average_setup_duration < 0
+                else source.average_setup_duration
+            ),
+            "tests_duration": (
+                None
+                if source.average_tests_duration < 0
+                else source.average_tests_duration
+            ),
+            "teardown_duration": (
+                None
+                if source.average_teardown_duration < 0
+                else source.average_teardown_duration
+            ),
+        }

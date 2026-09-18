@@ -1,0 +1,123 @@
+<div class="card border-info">
+    <div class="card-header py-3 bg-info text-white">
+        <h6 class="m-0 font-weight-bold">
+            <i class="fa-solid fa-chart-line me-2" aria-hidden="true"></i>
+            Suite Duration History
+        </h6>
+    </div>
+    <div class="card-body">
+        <div class="suite-duration-chart">
+            <canvas id="suiteDurationChart"></canvas>
+        </div>
+        {{ suite_duration_history|json_script:"suite-duration-history-data" }}
+    </div>
+</div>
+<style>
+    .suite-duration-chart {
+        height: 300px;
+    }
+</style>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const canvas = document.getElementById('suiteDurationChart');
+        const data = JSON.parse(document.getElementById('suite-duration-history-data').textContent);
+        if (!canvas) return;
+
+        // Stacked from the bottom up, keeping the setup and teardown overhead together.
+        // Skip a series with no values: Chart.js cannot fill Tests down to a null Teardown band.
+        const series = [
+            ['Setup', 'setup_duration', '#6f42c1', 'rgba(111, 66, 193, 0.35)'],
+            ['Teardown', 'teardown_duration', '#fd7e14', 'rgba(253, 126, 20, 0.35)'],
+            ['Tests', 'tests_duration', '#0dcaf0', 'rgba(13, 202, 240, 0.35)'],
+        ].filter(([, field]) => data.some(point => point[field] != null));
+        const top = series.length - 1;
+        // The legend and tooltip stay in the order the steps run
+        const order = ['Setup', 'Tests', 'Teardown'];
+        // Match tab.projects.helpers.humanize_duration
+        const formatDuration = seconds => {
+            if (seconds == null || seconds < 0) return '—';
+            if (seconds >= 100) {
+                return `${Math.floor(seconds / 60)}m${Math.floor(seconds % 60)}s`;
+            }
+            return `${seconds.toFixed(1).replace(/\.0$/, '')}s`;
+        };
+        new Chart(canvas, {
+            type: 'line',
+            data: {
+                datasets: series.map(([label, field, color, fillColor], index) => ({
+                    label,
+                    data: data.map(point => ({
+                        x: point.date,
+                        // Missing values stack as zero so later bands still have a fill target
+                        y: point[field] ?? 0,
+                    })),
+                    borderColor: color,
+                    backgroundColor: fillColor,
+                    fill: index === 0 ? 'origin' : '-1',
+                    // Only the top of the stack is outlined, marking the total
+                    borderWidth: index === top ? 2 : 0,
+                    pointRadius: index === top ? 2 : 0,
+                    pointHoverRadius: index === top ? 4 : 0,
+                    spanGaps: true,
+                })),
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    legend: {
+                        labels: {
+                            sort: (a, b) => order.indexOf(a.text) - order.indexOf(b.text),
+                            // Drop the outlines so each swatch is only the shade used in the chart
+                            generateLabels: chart => Chart.defaults.plugins.legend.labels
+                                .generateLabels(chart)
+                                .map(item => ({...item, lineWidth: 0})),
+                        },
+                    },
+                    tooltip: {
+                        // Anchor to the hovered point instead of averaging the stack
+                        position: 'nearest',
+                        filter: context => data[context.dataIndex][series[context.datasetIndex][1]] != null,
+                        itemSort: (a, b) => order.indexOf(a.dataset.label) - order.indexOf(b.dataset.label),
+                        callbacks: {
+                            label: context => `${context.dataset.label}: ${formatDuration(context.parsed.y)}`,
+                            footer: contexts => {
+                                const total = contexts.reduce((sum, context) => sum + context.parsed.y, 0);
+                                return `Total: ${formatDuration(total)}`;
+                            },
+                        },
+                    },
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        stacked: true,
+                        title: {
+                            display: true,
+                            text: 'Average duration (minutes)',
+                        },
+                        ticks: {
+                            callback: value => (Number(value) / 60).toFixed(1),
+                        },
+                    },
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'day',
+                            displayFormats: {
+                                day: 'M/dd',
+                            },
+                        },
+                        grid: {
+                            display: false,
+                        },
+                    },
+                },
+            },
+        });
+    });
+</script>

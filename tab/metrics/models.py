@@ -1,8 +1,12 @@
 import re
+from datetime import timedelta
 
+from django.conf import settings
 from django.core.cache import cache
 from django.db import models
+from django.urls import reverse
 from django.utils import timezone
+from django.utils.timesince import timesince
 
 import log
 
@@ -234,6 +238,22 @@ class Alert(models.Model):
         if self.history:
             text = f"Failure rate increased by {self.history.test.failure_rate_delta:.0%} today"
             extra = self.history.result.message if self.history.result else None
+        elif (
+            self.test.disabled_at
+            and self.test.disabled_at < timezone.now() - timedelta(days=1)
+        ):
+            age = timesince(self.test.disabled_at, depth=1)
+            text = (
+                f"Some tests have been disabled for more than {age}. "
+                "Prioritize fixes to restore them"
+            )
+            extra = None
+            url = (
+                settings.BASE_URL
+                + reverse("projects:disabled-tests", args=[self.test.project.path])
+                + "?sort=disabled_at"
+            )
+            label = url
         elif self.test.disabled_at:
             text = "Manually disabled from blocking merges"
             reason = self.test.disabled_reason or "(no reason provided)"

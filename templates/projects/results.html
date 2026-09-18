@@ -60,7 +60,7 @@
             </div>
         </div>
         {% if suite_id or suites|length > 1 %}
-            <ul class="nav nav-tabs mb-3">
+            <ul class="nav nav-tabs suite-tabs mb-3">
                 <li class="nav-item">
                     <a class="nav-link {% if not suite_id %}active{% endif %}"
                        href="{% url 'projects:results' project.path %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}">All Suites</a>

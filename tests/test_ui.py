@@ -1,18 +1,21 @@
 import re
+from datetime import timedelta
 from pathlib import Path
 
 from django.urls import reverse
+from django.utils import timezone
 
 import pytest
 from playwright.sync_api import Page
 
 from tab.core.models import Organization
+from tab.metrics.models import SuiteHistory, TestHistory
 from tab.projects.enums import Status
-from tab.projects.models import Project, Test
+from tab.projects.models import Project, Suite, Test
 from tab.releases.enums import Type
 from tab.releases.models import Environment, Release
 
-from .utils import force_login, take_snapshot
+from .utils import force_login, take_snapshot, wait_for_chart
 
 
 @pytest.fixture(autouse=True)
@@ -80,6 +83,130 @@ def test_releases(page: Page, live_server, admin_user):
     assert not re.search(r"[?&]lines=false", page.url)
     assert review.is_checked()
     take_snapshot(page, "releases/lines-on-review-on")
+
+
+@pytest.mark.django_db
+def test_troubleshooting_panel(page: Page, live_server, admin_user):
+    project = Project.objects.get(repository="https://github.com/foo/bar")
+    test = Test.objects.create(project=project, name="flaky-test")
+    test.results.create(
+        branch="main",
+        commit="abc123",
+        status=Status.FAILED,
+        duration=1.0,
+    )
+    now = timezone.now()
+    rates = [0.05, 0.08, 0.12, 0.18, 0.35, 0.55, 0.72, 0.80, 0.78, 0.82]
+    for index, rate in enumerate(rates):
+        history = TestHistory.objects.create(
+            test=test,
+            failure_rate=rate,
+            block_rate=rate * 0.6,
+            average_duration=1.0 + index * 0.1,
+        )
+        history.timestamp = now - timedelta(days=len(rates) - 1 - index)
+        history.save(update_fields=["timestamp"])
+
+    force_login(page, live_server, admin_user)
+    url = f"{live_server.url}{reverse('projects:test-results', args=[project.path, test.id])}"
+
+    page.goto(f"{url}?expand=false")
+    panel = page.locator("details.troubleshooting")
+    summary = page.get_by_text("Troubleshooting", exact=True)
+    assert summary.is_visible()
+    assert not panel.evaluate("el => el.open")
+    take_snapshot(page, "projects/troubleshooting-collapsed")
+
+    summary.click()
+    assert panel.evaluate("el => el.open")
+
+    # Hover a data point so the snapshot captures the chart tooltip
+    canvas = page.locator("#failureRateChart")
+    wait_for_chart(page, "failureRateChart", index=5)
+    box = canvas.bounding_box()
+    center = canvas.evaluate(
+        "el => Chart.getChart(el).getDatasetMeta(0).data[5].getCenterPoint()"
+    )
+    assert box
+    page.mouse.move(box["x"] + center["x"], box["y"] + center["y"])
+    page.wait_for_function(
+        "() => Chart.getChart('failureRateChart').tooltip.opacity === 1"
+    )
+
+    take_snapshot(page, "projects/troubleshooting-expanded")
+
+
+@pytest.mark.django_db
+def test_suite_troubleshooting_panel(page: Page, live_server, admin_user):
+    project = Project.objects.get(repository="https://github.com/foo/bar")
+    suite = Suite.objects.create(
+        project=project,
+        name="e2e",
+        local_command=(
+            'npm install\n\n# then\n\nnpm run test:e2e -- --grep="{test.name}"'
+        ),
+    )
+    now = timezone.now()
+    setups = [12.0, 13.0, 14.0, 16.0, 18.0, 20.0, 19.0, 17.0, 15.0, 14.0]
+    tests = [70.0, 85.0, 100.0, 115.0, 130.0, 145.0, 138.0, 120.0, 105.0, 90.0]
+    # Suites without a teardown step are normal, so some records have no value
+    teardowns = [4.0, 4.5, -1, -1, 7.0, 8.0, 7.5, 6.5, 5.5, 5.0]
+    for index, (setup, tests_duration, teardown) in enumerate(
+        zip(setups, tests, teardowns)
+    ):
+        history = SuiteHistory.objects.create(
+            suite=suite,
+            average_setup_duration=setup,
+            average_tests_duration=tests_duration,
+            average_teardown_duration=teardown,
+        )
+        history.timestamp = now - timedelta(days=len(setups) - 1 - index)
+        history.save(update_fields=["timestamp"])
+
+    force_login(page, live_server, admin_user)
+    url = f"{live_server.url}{reverse('projects:suite-tests', args=[project.path, suite.id])}"
+
+    page.goto(f"{url}?expand=false")
+    panel = page.locator("details.suite-troubleshooting")
+    summary = page.get_by_text("Troubleshooting", exact=True)
+    assert summary.is_visible()
+    assert not panel.evaluate("el => el.open")
+    take_snapshot(page, "projects/suite-troubleshooting-collapsed")
+
+    summary.click()
+    assert panel.evaluate("el => el.open")
+    assert page.get_by_text("Suite Duration History").is_visible()
+    assert page.get_by_text("Rerun Locally").is_visible()
+    assert page.get_by_text("npm run test:e2e").is_visible()
+    assert page.get_by_text("--grep").count() == 0
+
+    canvas = page.locator("#suiteDurationChart")
+    wait_for_chart(page, "suiteDurationChart", dataset=2, index=5)
+
+    # A missing teardown stacks as zero so the tests band still fills to setup
+    gap = page.evaluate("""() => {
+            const chart = Chart.getChart('suiteDurationChart');
+            const point = chart.getDatasetMeta(2).data[3];
+            return chart.scales.y.getValueForPixel(point.y);
+        }""")
+    assert gap == pytest.approx(setups[3] + tests[3], abs=1.0)
+
+    # Hover a data point so the snapshot captures the stacked duration tooltip
+    box = canvas.bounding_box()
+    center = canvas.evaluate(
+        "el => Chart.getChart(el).getDatasetMeta(2).data[5].getCenterPoint()"
+    )
+    assert box
+    page.mouse.move(box["x"] + center["x"], box["y"] + center["y"])
+    page.wait_for_function(
+        "() => Chart.getChart('suiteDurationChart').tooltip.opacity === 1"
+    )
+
+    # The tooltip anchors to the hovered point rather than the middle of the stack
+    caret = page.evaluate("() => Chart.getChart('suiteDurationChart').tooltip.caretY")
+    assert abs(caret - center["y"]) < 5
+
+    take_snapshot(page, "projects/suite-troubleshooting-expanded")
 
 
 @pytest.mark.django_db

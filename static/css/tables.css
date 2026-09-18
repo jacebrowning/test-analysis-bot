@@ -18,6 +18,63 @@
     margin-left: 0.25rem;
 }
 
+/* Scroll suite tabs sideways instead of wrapping to a second row */
+
+.suite-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+}
+
+/* Bootstrap hangs each tab 1px below the strip so the active one can cover the
+   bottom border. That overhang scrolls vertically once the strip scrolls, so
+   sit the tabs flat and paint the border inside the box instead. */
+
+.suite-tabs {
+    border-bottom: 0;
+    box-shadow: inset 0 calc(-1 * var(--bs-nav-tabs-border-width)) 0 var(--bs-nav-tabs-border-color);
+}
+
+.suite-tabs .nav-link {
+    margin-bottom: 0;
+}
+
+.suite-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.suite-tabs .nav-link {
+    white-space: nowrap;
+}
+
+/* Fade out tabs at whichever edge still has hidden tabs behind it. The widths
+   are set by the scroll handler in base.js. */
+
+.suite-tabs {
+    --suite-tabs-fade-start: 0px;
+    --suite-tabs-fade-end: 0px;
+    -webkit-mask-image: linear-gradient(to right,
+            transparent 0,
+            #000 var(--suite-tabs-fade-start),
+            #000 calc(100% - var(--suite-tabs-fade-end)),
+            transparent 100%);
+    mask-image: linear-gradient(to right,
+            transparent 0,
+            #000 var(--suite-tabs-fade-start),
+            #000 calc(100% - var(--suite-tabs-fade-end)),
+            transparent 100%);
+}
+
+.suite-tabs.suite-tabs-fade-start {
+    --suite-tabs-fade-start: 2rem;
+}
+
+.suite-tabs.suite-tabs-fade-end {
+    --suite-tabs-fade-end: 2rem;
+}
+
 /* Pin pagination to bottom of screen */
 
 .pagination {

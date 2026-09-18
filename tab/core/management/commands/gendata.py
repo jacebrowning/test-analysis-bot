@@ -1,3 +1,4 @@
+import math
 import random
 from datetime import timedelta
 from pathlib import Path
@@ -10,7 +11,7 @@ import log
 
 from tab.api.helpers import parse_junit_xml
 from tab.core.models import Organization
-from tab.metrics.models import Team, TestHistory
+from tab.metrics.models import SuiteHistory, Team, TestHistory
 from tab.projects.enums import Platform, Status, Target
 from tab.projects.models import Project, Result, Run, Suite, Test
 from tab.releases.enums import Type
@@ -19,6 +20,12 @@ from tab.releases.models import Environment, Release
 JUNIT_FIXTURE_PATH = (
     Path(__file__).resolve().parents[3] / "api" / "tests" / "files" / "junit.xml"
 )
+
+SAMPLE_TEST = "sample test"
+SAMPLE_SUITES = {
+    "e2e": [SAMPLE_TEST],
+    "unit": ["sample unit test", "another unit test"],
+}
 
 
 class Command(BaseCommand):
@@ -109,31 +116,36 @@ class Command(BaseCommand):
         else:
             self.stdout.write(self.style.WARNING("Sample project already exists"))
 
-        test, created = Test.objects.get_or_create(
-            project=project, name="sample test", original_branch="main"
-        )
-        if created:
-            self.stdout.write(self.style.SUCCESS(f"Created sample test"))
-        else:
-            self.stdout.write(self.style.WARNING(f"Sample test already exists"))
-            test.history.all().delete()
-
-        test.results.filter(branch="main").delete()
-
-        suite = test.suite
-        if suite:
-            suite.runs.filter(branch="main").delete()
-            suite.history.all().delete()
-
         days = 8
         num_results = 500
         end = timezone.now()
         start = end - timedelta(days=days)
 
-        self._generate_results(test, num_results, start, end)
-        if suite:
+        for name, test_names in SAMPLE_SUITES.items():
+            suite = self._generate_suite(project, name)
+            for test_name in test_names:
+                test = self._generate_test(project, suite, test_name)
+                self._generate_results(test, num_results, start, end)
+                test.save()  # refresh last_result
+                if test_name == SAMPLE_TEST:
+                    self._generate_history(test, days)
+
             self._generate_runs(project, suite, num_results, start, end)
-            if suite.update():
+            if SAMPLE_TEST in test_names:
+                if suite.update():
+                    suite.save(
+                        update_fields=[
+                            "average_setup_duration",
+                            "average_tests_duration",
+                            "average_teardown_duration",
+                            "updated_at",
+                        ]
+                    )
+                self._generate_suite_history(suite, days)
+            else:
+                suite.average_setup_duration = -1
+                suite.average_tests_duration = -1
+                suite.average_teardown_duration = -1
                 suite.save(
                     update_fields=[
                         "average_setup_duration",
@@ -142,8 +154,35 @@ class Command(BaseCommand):
                         "updated_at",
                     ]
                 )
-        test.save()  # refresh last_result
-        self._generate_history(test, days)
+
+    def _generate_suite(self, project, name):
+        suite, created = Suite.objects.get_or_create(project=project, name=name)
+        if created:
+            self.stdout.write(self.style.SUCCESS(f"Created sample suite: {suite}"))
+        else:
+            self.stdout.write(
+                self.style.WARNING(f"Sample suite already exists: {suite}")
+            )
+        suite.runs.filter(branch="main").delete()
+        suite.history.all().delete()
+        return suite
+
+    def _generate_test(self, project, suite, name):
+        test, created = Test.objects.get_or_create(
+            project=project,
+            name=name,
+            defaults={"suite": suite, "original_branch": "main"},
+        )
+        if created:
+            self.stdout.write(self.style.SUCCESS(f"Created sample test: {test}"))
+        else:
+            self.stdout.write(self.style.WARNING(f"Sample test already exists: {test}"))
+            test.history.all().delete()
+            if test.suite_id != suite.id:
+                test.suite = suite
+                test.save(update_fields=["suite", "updated_at"])
+        test.results.filter(branch="main").delete()
+        return test
 
     def _generate_history(self, test, days):
         failure_rate = 0.25
@@ -175,7 +214,7 @@ class Command(BaseCommand):
         statuses = [Status.PASSED, Status.FAILED]
         targets = [None, Target.WEB, Target.DESKTOP]
         platforms = [None, Platform.MACOS, Platform.WINDOWS, Platform.LINUX]
-        browsers = [None, "Chromium", "Firefox", "WebKit", "Edge"]
+        browsers = [None, "Chrome", "Firefox", "WebKit", "Edge"]
         sample_messages = [
             "",
             "AssertionError: expected 42",
@@ -209,13 +248,43 @@ class Command(BaseCommand):
         Result.objects.bulk_create(results)
         self.stdout.write(self.style.SUCCESS("Generated sample test results"))
 
+    def _generate_suite_history(self, suite, days):
+        suite.history.all().delete()
+        hours_steps = list(range(0, 24 * days, 6))
+        span = max(len(hours_steps) - 1, 1)
+        for index, hours in enumerate(hours_steps):
+            # Rise through the window so some totals format as XmYs (> 2 minutes)
+            peak = math.sin(math.pi * index / span)
+            history = SuiteHistory.objects.create(
+                suite=suite,
+                average_setup_duration=max(
+                    0.1, suite.average_setup_duration + random.uniform(-2.0, 2.0)
+                ),
+                average_tests_duration=max(
+                    0.1,
+                    suite.average_tests_duration
+                    + random.uniform(-10.0, 10.0)
+                    + 50.0 * peak,
+                ),
+                average_teardown_duration=max(
+                    0.1, suite.average_teardown_duration + random.uniform(-1.0, 1.0)
+                ),
+            )
+            history.timestamp = timezone.now() - timedelta(hours=hours)
+            history.save(update_fields=["timestamp"])
+        self.stdout.write(self.style.SUCCESS("Generated sample suite duration history"))
+
     def _generate_runs(self, project, suite, num_results, start, end):
         runs = []
+        long_e2e = suite.name == "e2e"
         for i in range(num_results):
             fraction = (i + 0.5) / num_results
             tests_started_at = start + (end - start) * fraction
             setup_duration = round(random.uniform(8.0, 15.0), 2)
-            tests_duration = round(random.uniform(30.0, 90.0), 2)
+            tests_duration = round(
+                random.uniform(90.0, 150.0) if long_e2e else random.uniform(30.0, 90.0),
+                2,
+            )
             teardown_duration = round(random.uniform(2.0, 8.0), 2)
             tests_finished_at = tests_started_at + timedelta(seconds=tests_duration)
             runs.append(

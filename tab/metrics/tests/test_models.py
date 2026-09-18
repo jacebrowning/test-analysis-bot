@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.core.cache import cache
 from django.utils import timezone
+from django.utils.timesince import timesince
 
 import pytest
 
@@ -145,6 +146,36 @@ def describe_alert(expect):
 
             expect(alert.subscriptions) == [s1, s3, s2]
 
+    def describe_build(expect):
+        @pytest.mark.django_db
+        def it_reminds_when_disabled_in_the_past():
+            project = Project.objects.create(repository="https://github.com/foo/bar")
+            test = Test.objects.create(project=project, name="my-test")
+            test.disabled_at = timezone.now() - timedelta(days=2)
+            alert = Alert(test=test)
+            message = alert.build()
+            age = timesince(test.disabled_at, depth=1)
+            expect(message.text) == (
+                f"Some tests have been disabled for more than {age}. "
+                "Prioritize fixes to restore them"
+            )
+            expect(message.url).contains(
+                "/projects/foo/bar/tests/disabled?sort=disabled_at"
+            )
+            expect(message.label) == message.url
+
+        @pytest.mark.django_db
+        def it_keeps_the_manual_disabled_copy_when_recent():
+            project = Project.objects.create(repository="https://github.com/foo/bar")
+            test = Test.objects.create(
+                project=project, name="my-test", disabled_reason="flaky"
+            )
+            test.disabled_at = timezone.now() - timedelta(hours=12)
+            alert = Alert(test=test)
+            message = alert.build()
+            expect(message.text) == "Manually disabled from blocking merges"
+            expect(message.extra) == "unknown user: flaky"
+
 
 def describe_suite_history(expect):
     @pytest.fixture
@@ -191,3 +222,41 @@ def describe_suite_history(expect):
             second = SuiteHistory.objects.create_from_suite(suite)
             expect(second.id) == first.id
             expect(second.average_setup_duration) == 15.0
+
+    def describe_get_data(expect, suite):
+        @pytest.mark.django_db
+        def it_returns_duration_history_in_timestamp_order():
+            older = SuiteHistory.objects.create(
+                suite=suite,
+                average_setup_duration=10.0,
+                average_tests_duration=-1,
+                average_teardown_duration=2.0,
+            )
+            newer = SuiteHistory.objects.create(
+                suite=suite,
+                average_setup_duration=12.0,
+                average_tests_duration=40.0,
+                average_teardown_duration=3.0,
+            )
+            SuiteHistory.objects.filter(pk=older.pk).update(
+                timestamp=timezone.now() - timedelta(days=1)
+            )
+
+            data = suite.history.get_data(suite, weeks=1)
+
+            expect(len(data)) == 1
+            expect(data[0]["setup_duration"]) == 12.0
+            expect(data[0]["tests_duration"]) == 40.0
+            expect(data[0]["teardown_duration"]) == 3.0
+
+        @pytest.mark.django_db
+        def it_skips_records_without_tests_duration():
+            SuiteHistory.objects.create(
+                suite=suite,
+                average_setup_duration=10.0,
+                average_tests_duration=-1,
+                average_teardown_duration=2.0,
+            )
+            suite.average_tests_duration = -1
+
+            expect(suite.history.get_data(suite, weeks=1)) == []

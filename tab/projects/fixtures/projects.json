@@ -1,5 +1,23 @@
 [
   {
+    "model": "auth.user",
+    "pk": 100,
+    "fields": {
+      "password": "!",
+      "last_login": null,
+      "is_superuser": false,
+      "username": "jane",
+      "first_name": "Jane",
+      "last_name": "Doe",
+      "email": "user@example.com",
+      "is_staff": false,
+      "is_active": true,
+      "date_joined": "2025-01-01T00:00:00Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
     "model": "projects.project",
     "pk": 1,
     "fields": {
@@ -155,7 +173,28 @@
       "name": "e2e",
       "parent": 1,
       "supports_override": true,
-      "local_command": "",
+      "local_command": "npm install && npm run build\n\n# then\n\nnpm run test:e2e -- --grep=\"{test.regex}\"",
+      "error_indicators": [],
+      "skipped_indicators": [],
+      "failure_rate_upper_threshold": 0.5,
+      "failure_rate_lower_threshold": 0.1,
+      "block_rate_upper_threshold": 0.05,
+      "block_rate_lower_threshold": 0.01,
+      "average_duration_upper_threshold": 60.0,
+      "average_duration_lower_threshold": 30.0,
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    }
+  },
+  {
+    "model": "projects.suite",
+    "pk": 8,
+    "fields": {
+      "project": 2,
+      "name": "unit",
+      "parent": null,
+      "supports_override": true,
+      "local_command": "cargo nextest run -E 'test({test.name})'",
       "error_indicators": [],
       "skipped_indicators": [],
       "failure_rate_upper_threshold": 0.5,
@@ -402,7 +441,11 @@
       "disabled_at": "2025-01-02T00:00:00Z",
       "disabled_reason": "Temporarily disabled for refactor",
       "disabled_tracker": "https://github.com/KittyCAD/sample-project/issues/1",
-      "disabled_user": null,
+      "disabled_user": 100,
+      "failure_rate": 0.65,
+      "block_rate": 0.3,
+      "average_duration": 18.0,
+      "last_result": 1903,
       "created_at": "2025-01-01T00:00:00Z",
       "updated_at": "2025-01-02T00:00:00Z"
     }
@@ -418,9 +461,9 @@
       "original_commit": "",
       "original_metadata": {},
       "disabled_at": null,
-      "disabled_reason": "",
-      "disabled_tracker": null,
-      "disabled_user": null,
+      "disabled_reason": "Waiting on the test runner upgrade discussed in Slack",
+      "disabled_tracker": "https://kittycad.slack.com/archives/C0123ABCDEF/p1735689600000000",
+      "disabled_user": 100,
       "failure_rate": 0.05,
       "block_rate": 0.02,
       "average_duration": 120.0,
@@ -440,9 +483,9 @@
       "original_commit": "",
       "original_metadata": {},
       "disabled_at": null,
-      "disabled_reason": "",
-      "disabled_tracker": null,
-      "disabled_user": null,
+      "disabled_reason": "Blocked on an upstream fix in the modeling app",
+      "disabled_tracker": "https://github.com/KittyCAD/modeling-app/issues/7890",
+      "disabled_user": 100,
       "failure_rate": 0.55,
       "block_rate": 0.0,
       "average_duration": 42.0,

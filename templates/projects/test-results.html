@@ -65,20 +65,22 @@
                                     <a class="dropdown-item small {% if branch == 'all' %}active{% endif %}"
                                        href="{{ view_all_branches_url }}">Show All Branches</a>
                                 </li>
-                                {% if platform_filter_links %}
-                                    <li>
-                                        <hr class="dropdown-divider">
-                                    </li>
-                                    <li>
-                                        <h6 class="dropdown-header text-muted mb-0">Platform</h6>
-                                    </li>
-                                    {% for label, platform_href, plat in platform_filter_links %}
+                                {% for section in filter_menu_sections %}
+                                    {% if section.links %}
                                         <li>
-                                            <a class="dropdown-item small {% if platform == plat %}active{% endif %}"
-                                               href="{{ platform_href }}">{{ label }}</a>
+                                            <hr class="dropdown-divider">
                                         </li>
-                                    {% endfor %}
-                                {% endif %}
+                                        <li>
+                                            <h6 class="dropdown-header text-muted mb-0">{{ section.heading }}</h6>
+                                        </li>
+                                        {% for label, href, value in section.links %}
+                                            <li>
+                                                <a class="dropdown-item small {% if section.current == value %}active{% endif %}"
+                                                   href="{{ href }}">{{ label }}</a>
+                                            </li>
+                                        {% endfor %}
+                                    {% endif %}
+                                {% endfor %}
                             </ul>
                         </div>
                     {% endif %}
@@ -129,6 +131,11 @@
                         </p>
                     </div>
                     <div class="col d-flex flex-column">
+                        <h5 class="card-title">Maintainer</h5>
+                        <small class="fst-italic text-muted d-block mb-2">{{ maintainer_help }}</small>
+                        <div class="card-text mt-auto">{% include "projects/_maintainer.html" %}</div>
+                    </div>
+                    <div class="col d-flex flex-column">
                         <h5 class="card-title">Failure Rate</h5>
                         <small class="fst-italic text-muted d-block mb-2">{{ failure_rate_help }}</small>
                         <p class="card-text mt-auto">{% colorize test "failure_rate" %}</p>
@@ -137,19 +144,6 @@
                         <h5 class="card-title">Block Rate</h5>
                         <small class="fst-italic text-muted d-block mb-2">{{ block_rate_help }}</small>
                         <p class="card-text mt-auto">{% colorize test "block_rate" %}</p>
-                    </div>
-                    <div class="col d-flex flex-column">
-                        <h5 class="card-title">Test Enabled</h5>
-                        <small class="fst-italic text-muted d-block mb-2">{{ enabled_help }}</small>
-                        <p class="card-text mt-auto">
-                            {% if test.enabled %}
-                                <i class="fa-solid fa-check text-success me-1"></i>
-                                Yes
-                            {% else %}
-                                <i class="fa-solid fa-xmark text-danger me-1"></i>
-                                No
-                            {% endif %}
-                        </p>
                     </div>
                     <div class="col d-flex flex-column">
                         <h5 class="card-title">Average Duration</h5>
@@ -166,89 +160,110 @@
                 </div>
             </div>
         </div>
-        <details class="mb-4" {% if expand %}open{% endif %}>
-            <summary>
-                Advanced Options
-                <div class="d-flex gap-2 float-end">
-                    {% if branch %}
-                        <a href="{{ clear_branch_filter_url }}"
-                           class="btn btn-outline-danger align-baseline">
-                            branch:{{ branch }}
-                            <i class="fa-solid fa-xmark ms-1"></i>
-                        </a>
-                    {% endif %}
-                    {% if platform %}
-                        <a href="{{ clear_platform_filter_url }}"
-                           class="btn btn-outline-danger align-baseline">
-                            platform:{{ platform }}
-                            <i class="fa-solid fa-xmark ms-1"></i>
-                        </a>
-                    {% endif %}
-                </div>
+        <details class="troubleshooting mb-4" {% if expand %}open{% endif %}>
+            <summary class="troubleshooting-summary">
+                <h6 class="card-title mb-0">Troubleshooting</h6>
+                <i class="fa-solid fa-chevron-right fa-sm text-muted ms-auto troubleshooting-chevron"
+                   aria-hidden="true"></i>
             </summary>
-            {% include "projects/_history.html" %}
-            {% if test.command or suite_admin_url %}
-                <div class="card shadow mt-4 border-dark">
-                    <div class="card-header py-3 bg-dark text-white d-flex justify-content-between align-items-center">
-                        <h6 class="m-0 font-weight-bold">
-                            <i class="fa-solid fa-play-circle me-2"></i>
-                            Rerun Locally
-                        </h6>
-                        {% if suite_admin_url %}
-                            <a href="{{ suite_admin_url }}"
-                               target="_blank"
-                               class="text-danger"
-                               title="Edit in admin">
-                                <i class="fa-solid fa-table"></i>
-                            </a>
-                        {% endif %}
-                    </div>
-                    <div class="bg-light text-dark p-3 rounded-bottom command">
-                        {% for line, copyable in test.command %}
-                            <div class="d-flex align-items-center mb-1">
-                                <pre class="mb-0 flex-grow-1 font-monospace"><code>{% if copyable %}<span class="text-success prompt">$ </span>{% endif %}{% if not copyable %}<span class="text-muted">{% endif %}{{ line }}{% if not copyable %}</span>{% endif %}</code></pre>
-                                {% if copyable %}
-                                    <button class="btn btn-sm btn-outline-secondary ms-2 copy-btn"
-                                            data-clipboard-text="{{ line }}"
-                                            title="Copy Line">
-                                        <i class="fa-regular fa-copy"></i>
-                                    </button>
-                                {% endif %}
-                            </div>
-                        {% empty %}
-                            <p class="text-muted mb-0">No local commands are defined for this test suite.</p>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endif %}
-            {% if test.suite and test.suite.supports_override %}
-                <div class="card shadow mt-4 border-danger">
-                    <div class="card-header py-3 bg-danger text-white">
-                        <h6 class="m-0 font-weight-bold">
-                            <i class="fa-solid fa-triangle-exclamation me-2"></i>
-                            Override Behavior
-                        </h6>
-                    </div>
-                    <div class="card-body">
-                        <form method="post" id="disable-test-form">
-                            {% csrf_token %}
-                            {{ form.test_id }}
-                            <div class="row">{{ form.disabled|as_crispy_field }}</div>
-                            <div class="row mt-3">
-                                <div class="col-md-6">{{ form.disabled_reason|as_crispy_field }}</div>
-                                <div class="col-md-6">
-                                    {{ form.disabled_tracker|as_crispy_field }}
-                                    {{ form.disabled_user|as_crispy_field }}
+            <div class="troubleshooting-body">
+                {% include "projects/_history.html" %}
+                {% if test.command or suite_admin_url %}
+                    <div class="card mt-4 border-dark">
+                        <div class="card-header py-3 bg-dark text-white d-flex justify-content-between align-items-center">
+                            <h6 class="m-0 font-weight-bold">
+                                <i class="fa-solid fa-play-circle me-2"></i>
+                                Rerun Locally
+                            </h6>
+                            {% if suite_admin_url %}
+                                <a href="{{ suite_admin_url }}"
+                                   target="_blank"
+                                   class="text-danger"
+                                   title="Edit in admin">
+                                    <i class="fa-solid fa-table"></i>
+                                </a>
+                            {% endif %}
+                        </div>
+                        <div class="bg-light text-dark p-3 rounded-bottom command">
+                            {% for line, copyable in test.command %}
+                                <div class="d-flex align-items-center mb-1">
+                                    <pre class="mb-0 flex-grow-1 font-monospace"><code>{% if copyable %}<span class="text-success prompt">$ </span>{% endif %}{% if not copyable %}<span class="text-muted">{% endif %}{{ line }}{% if not copyable %}</span>{% endif %}</code></pre>
+                                    {% if copyable %}
+                                        <button class="btn btn-sm btn-outline-secondary ms-2 copy-btn"
+                                                data-clipboard-text="{{ line }}"
+                                                title="Copy Line">
+                                            <i class="fa-regular fa-copy"></i>
+                                        </button>
+                                    {% endif %}
                                 </div>
-                            </div>
-                            <button type="submit" class="btn btn-danger mt-3">
-                                <i class="fa-solid fa-pen-to-square me-2"></i>Update Test
-                            </button>
-                        </form>
+                            {% empty %}
+                                <p class="text-muted mb-0">No local commands are defined for this test suite.</p>
+                            {% endfor %}
+                        </div>
                     </div>
-                </div>
-            {% endif %}
+                {% endif %}
+                {% if test.suite and test.suite.supports_override %}
+                    <div class="card mt-4 border-danger">
+                        <div class="card-header py-3 bg-danger text-white">
+                            <h6 class="m-0 font-weight-bold">
+                                <i class="fa-solid fa-triangle-exclamation me-2"></i>
+                                Override Behavior
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <form method="post" id="disable-test-form">
+                                {% csrf_token %}
+                                {{ form.test_id }}
+                                <div class="row">{{ form.disabled|as_crispy_field }}</div>
+                                <div class="row mt-3">
+                                    <div class="col-md-6">{{ form.disabled_reason|as_crispy_field }}</div>
+                                    <div class="col-md-6">
+                                        {{ form.disabled_tracker|as_crispy_field }}
+                                        {{ form.disabled_user|as_crispy_field }}
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-danger mt-3">
+                                    <i class="fa-solid fa-pen-to-square me-2"></i>Update Test
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
         </details>
+        {% if branch or platform or target or browser %}
+            <div class="result-filters d-flex flex-wrap align-items-center gap-2 mb-3">
+                <span class="text-muted small">Filtering results by</span>
+                {% if branch %}
+                    <a href="{{ clear_branch_filter_url }}"
+                       class="btn btn-sm btn-outline-danger">
+                        branch:{{ branch }}
+                        <i class="fa-solid fa-xmark ms-1"></i>
+                    </a>
+                {% endif %}
+                {% if platform %}
+                    <a href="{{ clear_platform_filter_url }}"
+                       class="btn btn-sm btn-outline-danger">
+                        platform:{{ platform }}
+                        <i class="fa-solid fa-xmark ms-1"></i>
+                    </a>
+                {% endif %}
+                {% if target %}
+                    <a href="{{ clear_target_filter_url }}"
+                       class="btn btn-sm btn-outline-danger">
+                        target:{{ target }}
+                        <i class="fa-solid fa-xmark ms-1"></i>
+                    </a>
+                {% endif %}
+                {% if browser %}
+                    <a href="{{ clear_browser_filter_url }}"
+                       class="btn btn-sm btn-outline-danger">
+                        browser:{{ browser }}
+                        <i class="fa-solid fa-xmark ms-1"></i>
+                    </a>
+                {% endif %}
+            </div>
+        {% endif %}
         {% render_table table %}
     </div>
 {% endblock content %}
@@ -261,6 +276,47 @@
 {% block extra_css %}
     <link rel="stylesheet" href="{% static 'css/tables.css' %}">
     <style>
+        .troubleshooting {
+            border: 1px solid var(--bs-border-color);
+            border-radius: var(--bs-border-radius);
+        }
+        .troubleshooting-summary {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem 0.75rem;
+            border-radius: calc(var(--bs-border-radius) - 1px);
+            background-color: var(--bs-tertiary-bg);
+            cursor: pointer;
+            list-style: none;
+        }
+        .troubleshooting[open] .troubleshooting-summary {
+            border-bottom: 1px solid var(--bs-border-color);
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+        .troubleshooting-body {
+            padding: 1rem;
+        }
+        .troubleshooting-summary::-webkit-details-marker {
+            display: none;
+        }
+        .troubleshooting-summary:hover {
+            background-color: var(--bs-secondary-bg);
+        }
+        .troubleshooting-chevron {
+            display: inline-block;
+            width: 1em;
+            text-align: center;
+            transition: transform 0.15s ease-in-out;
+        }
+        .troubleshooting[open] .troubleshooting-chevron {
+            transform: rotate(90deg);
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .troubleshooting-chevron {
+                transition: none;
+            }
+        }
         .prompt {
             user-select: none;
         }

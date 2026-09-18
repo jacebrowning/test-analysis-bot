@@ -43,6 +43,81 @@ def describe_suite(expect):
             )
             expect(str(suite)) == "MyUser › my_repo"
 
+    def describe_command(expect):
+        def it_is_empty_without_a_local_command():
+            expect(Suite(name="my-suite").command) == []
+
+        def it_trims_arguments_that_need_a_test():
+            suite = Suite(
+                name="my-suite",
+                local_command=(
+                    "npm install"
+                    "\n\n"
+                    "# then"
+                    "\n\n"
+                    'npm run test:e2e -- --grep="{test.regex}"'
+                ),
+            )
+            expect(suite.command) == [
+                ("npm install", True),
+                ("\n", False),
+                ("# then", False),
+                ("\n", False),
+                ("npm run test:e2e", True),
+            ]
+
+        def it_keeps_setup_steps_beside_a_trimmed_line():
+            suite = Suite(
+                name="my-suite",
+                local_command=(
+                    'make test-e2e-desktop E2E_GREP="{test.regex}"'
+                    "\n\n"
+                    "# or"
+                    "\n\n"
+                    "npm install"
+                    "\n"
+                    "npm run build:wasm"
+                    "\n"
+                    "npm run tronb:vite:dev"
+                    "\n"
+                    'npm run test:e2e:desktop -- --grep="{test.regex}"'
+                ),
+            )
+            expect(suite.command) == [
+                ("make test-e2e-desktop", True),
+                ("\n", False),
+                ("# or", False),
+                ("\n", False),
+                ("npm install", True),
+                ("npm run build:wasm", True),
+                ("npm run tronb:vite:dev", True),
+                ("npm run test:e2e:desktop", True),
+            ]
+
+        def it_keeps_quoted_values_together():
+            suite = Suite(
+                name="my-suite",
+                local_command="cargo nextest run -E 'test({test.name}) and slow'",
+            )
+            expect(suite.command) == [("cargo nextest run", True)]
+
+        def it_keeps_comments_alongside_a_command():
+            suite = Suite(
+                name="my-suite",
+                local_command="# install first\nnpm install",
+            )
+            expect(suite.command) == [
+                ("# install first", False),
+                ("npm install", True),
+            ]
+
+        def it_is_empty_when_nothing_is_left_to_run():
+            suite = Suite(
+                name="my-suite",
+                local_command="# run the failing test\n\n{test.command}",
+            )
+            expect(suite.command) == []
+
     def describe_update_average_setup_duration(expect, project: Project):
         @pytest.mark.django_db
         def it_returns_false_if_no_runs():
@@ -208,6 +283,51 @@ def describe_test(expect):
             test.failure_rate = 0
             test.save()
             expect(bool(test.disabled_at)) == True
+
+    def describe_disabled_tracker_humanized(expect):
+        def it_shortens_same_repository_issues():
+            project = Project(repository="https://github.com/foo/bar")
+            test = Test(
+                project=project,
+                disabled_tracker=f"{project.repository}/issues/1",
+            )
+            expect(test.disabled_tracker_humanized) == "issues/1"
+
+        def it_shortens_external_numbered_references():
+            project = Project(repository="https://github.com/foo/bar")
+            test = Test(
+                project=project,
+                disabled_tracker="https://gitlab.com/foo/other/issues/99",
+            )
+            expect(test.disabled_tracker_humanized) == "other/issues/99"
+
+        def it_shortens_external_pull_requests():
+            project = Project(repository="https://github.com/KittyCAD/engine")
+            test = Test(
+                project=project,
+                disabled_tracker="https://github.com/KittyCAD/modeling-app/pull/13881",
+            )
+            expect(test.disabled_tracker_humanized) == "modeling-app/pull/13881"
+
+        def it_keeps_urls_without_a_numbered_reference():
+            url = "https://github.com/foo/other/actions"
+            test = Test(
+                project=Project(repository="https://github.com/foo/bar"),
+                disabled_tracker=url,
+            )
+            expect(test.disabled_tracker_humanized) == url
+
+        def it_keeps_urls_without_a_numeric_id():
+            url = "https://kittycad.slack.com/archives/C0123/p1"
+            test = Test(
+                project=Project(repository="https://github.com/foo/bar"),
+                disabled_tracker=url,
+            )
+            expect(test.disabled_tracker_humanized) == url
+
+        def it_is_empty_without_a_tracker():
+            test = Test(project=Project(repository="https://github.com/foo/bar"))
+            expect(test.disabled_tracker_humanized) == ""
 
     def describe_enabled(expect, project: Project):
         @pytest.mark.django_db
@@ -401,7 +521,7 @@ def describe_result(expect):
                 duration=12.3,
                 target=Target.DESKTOP.value,
                 platform=Platform.MACOS.value,
-                browser="Chromium",
+                browser="Chrome",
                 metadata={
                     "logs": logs,
                     "GITHUB_RUN_ID": "99",

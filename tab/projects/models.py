@@ -19,11 +19,14 @@ from tab.core.models import Organization
 from . import managers
 from .constants import (
     ANSI_ESCAPE,
+    ARGUMENT,
     CHECKOUT_COMMAND,
     DEFAULT_SUITE,
     FAILURE_RATE_EPSILON,
+    INTERPOLATION,
     PENDING_THRESHOLD,
     RESTORATION_THRESHOLD,
+    TRACKER_REFERENCE,
     get_default_branches,
 )
 from .enums import Browser, Platform, Status, Target
@@ -189,6 +192,45 @@ class Suite(models.Model):
             return str(self.project)
         return f"{self.project} › {self.name}"
 
+    @property
+    def command(self) -> list[tuple[str, bool]]:
+        """Returns a list of (line, copyable) tuples that run without a test."""
+
+        def copyable(line: str) -> bool:
+            line = line.strip()
+            return bool(line) and not line.startswith("#")
+
+        def trim(line: str) -> str:
+            """Cut a line at the first argument that needs a specific test."""
+            arguments = ARGUMENT.findall(line)
+            for index, argument in enumerate(arguments):
+                if INTERPOLATION.search(argument):
+                    arguments = arguments[:index]
+                    # Drop the option the value belonged to, such as "-k" or "--"
+                    while arguments and arguments[-1].startswith("-"):
+                        arguments.pop()
+                    return " ".join(arguments)
+            return line
+
+        blocks: list[list[str]] = []
+        for block in re.split(r"\n\s*\n", self.local_command.strip()):
+            trimmed = [trim(line) for line in block.split("\n")]
+            if remaining := [line for line in trimmed if line.strip()]:
+                blocks.append(remaining)
+
+        # Drop dividers like "# or" that no longer sit between two commands
+        while blocks and not any(map(copyable, blocks[0])):
+            blocks.pop(0)
+        while blocks and not any(map(copyable, blocks[-1])):
+            blocks.pop()
+
+        lines: list[tuple[str, bool]] = []
+        for block in blocks:
+            if lines:
+                lines.append(("\n", False))
+            lines += [(line, copyable(line)) for line in block]
+        return lines
+
     def update_average_setup_duration(self) -> bool:
         return self._update_average_duration(
             "average_setup_duration",
@@ -346,7 +388,7 @@ class Test(models.Model):
         null=True,
         blank=True,
         related_name="maintained_tests",
-        help_text="User responsible for maintaining this test",
+        help_text="Person responsible for maintaining this test",
     )
 
     disabled_at = models.DateTimeField(
@@ -372,7 +414,7 @@ class Test(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        help_text="User who disabled the test",
+        help_text="Person who last updated this override behavior",
     )
 
     enabled = models.BooleanField(
@@ -521,6 +563,19 @@ class Test(models.Model):
         if self.suite and self.suite.skipped_indicators:
             return self.suite.skipped_indicators
         return self.project.skipped_indicators
+
+    @property
+    def disabled_tracker_humanized(self) -> str:
+        value = self.disabled_tracker or ""
+        if not value:
+            return ""
+        label = value.removeprefix(self.project.repository).strip("/")
+        if label != value:
+            return label
+        path = value.split("?", 1)[0].split("#", 1)[0]
+        if match := TRACKER_REFERENCE.search(path):
+            return match.group("label")
+        return value
 
     @property
     def failure_rate_humanized(self) -> str:

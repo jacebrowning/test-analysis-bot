@@ -105,10 +105,10 @@
                             <thead>
                                 <tr>
                                     <th>Test</th>
-                                    <th class="text-center text-nowrap">Maintainer</th>
-                                    <th class="text-center text-nowrap">Failure Rate</th>
-                                    <th class="text-center text-nowrap">Block Rate</th>
-                                    <th class="text-center text-nowrap">Average Duration</th>
+                                    <th class="text-center text-nowrap" title="{{ maintainer_help }}">Maintainer</th>
+                                    <th class="text-center text-nowrap" title="{{ failure_rate_help }}">Failure Rate</th>
+                                    <th class="text-center text-nowrap" title="{{ block_rate_help }}">Block Rate</th>
+                                    <th class="text-center text-nowrap" title="{{ average_duration_help }}">Average Duration</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -117,32 +117,7 @@
                                         <td class="text-break">
                                             <a href="{% url 'projects:test-results' project.path test.id %}?weeks=3">{{ test }}</a>
                                         </td>
-                                        <td class="text-center text-nowrap">
-                                            {% if test.maintainer %}
-                                                <span>{{ test.maintainer.email }}</span>
-                                                <form method="post"
-                                                      action="{% url 'projects:test-maintainer' project.path test.id %}"
-                                                      class="d-inline"
-                                                      onsubmit="return confirm('Clear this test maintainer?');">
-                                                    {% csrf_token %}
-                                                    <input type="hidden" name="action" value="clear">
-                                                    <button type="submit"
-                                                            class="btn btn-sm btn-link text-danger p-1"
-                                                            title="Clear maintainer"
-                                                            aria-label="Clear maintainer">
-                                                        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                                                    </button>
-                                                </form>
-                                            {% else %}
-                                                <form method="post"
-                                                      action="{% url 'projects:test-maintainer' project.path test.id %}"
-                                                      class="d-inline">
-                                                    {% csrf_token %}
-                                                    <input type="hidden" name="action" value="assign">
-                                                    <button type="submit" class="btn btn-sm btn-outline-secondary text-nowrap">Assign to me</button>
-                                                </form>
-                                            {% endif %}
-                                        </td>
+                                        <td class="text-center text-nowrap">{% include "projects/_maintainer.html" %}</td>
                                         <td class="text-center">{% colorize test "failure_rate" %}</td>
                                         <td class="text-center">{% colorize test "block_rate" %}</td>
                                         <td class="text-center">{% colorize test "average_duration" %}</td>
@@ -166,7 +141,7 @@
                         <table class="table">
                             <thead>
                                 <tr>
-                                    <th>User</th>
+                                    <th title="{{ disabled_user_help }}">User</th>
                                     <th>Total Overall</th>
                                     <th>Still Disabled</th>
                                     <th>Since Fixed</th>

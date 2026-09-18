@@ -15,6 +15,15 @@ CHECKOUT_COMMAND = (
     "git fetch origin && git checkout {branch} && git reset --hard origin/{branch}"
 )
 
+# Matches a format placeholder, e.g. the {test.name} in 'pytest -k "{test.name}"'
+INTERPOLATION = re.compile(r"\{[^}]*\}")
+
+# Matches one command argument, keeping quoted values together
+ARGUMENT = re.compile(r"""(?:[^\s"']|"[^"]*"|'[^']*')+""")
+
+# Matches a trailing /<name>/<kind>/<number> path, e.g. modeling-app/pull/13881
+TRACKER_REFERENCE = re.compile(r"/(?P<label>[^/]+/[^/]+/\d+)/?$")
+
 PENDING_THRESHOLD = timedelta(minutes=15)  # minimum duration before reporting failures
 EXPIRED_THRESHOLD = PENDING_THRESHOLD * 2  # maximum duration to expect suite runs
 FAILURE_RATE_EPSILON = 0.001  # small value to keep tests disabled for a bit longer

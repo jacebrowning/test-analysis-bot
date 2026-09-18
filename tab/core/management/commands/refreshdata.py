@@ -18,9 +18,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         start = timezone.now()
         log.info(f"Started job at {start.strftime('%Y-%m-%d %H:%M:%S')}")
+        self.update_bulk_tests()
         self.finalize_releases()
         self.fetch_active_branches()
-        self.update_bulk_tests()
         delta = timezone.now() - start
         log.info(f"Finished job after {delta.seconds // 60}:{delta.seconds % 60:02d}")
 

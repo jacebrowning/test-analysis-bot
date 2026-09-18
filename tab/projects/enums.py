@@ -127,18 +127,25 @@ class Platform(models.TextChoices):
 class Browser:
 
     KNOWN = {
-        "chromium": "Chromium",
         "chrome": "Chrome",
         "firefox": "Firefox",
         "webkit": "WebKit",
         "safari": "Safari",
         "edge": "Edge",
-        "msedge": "Edge",
     }
+    ALIASES = {
+        "chromium": "chrome",
+        "msedge": "edge",
+    }
+
+    @classmethod
+    def choices(cls) -> list[tuple[str, str]]:
+        return sorted(cls.KNOWN.items())
 
     @classmethod
     def normalize(cls, value: str) -> str:
         stripped = value.strip()
         if not stripped:
             return stripped
-        return cls.KNOWN.get(stripped.lower(), stripped)
+        key = cls.ALIASES.get(stripped.lower(), stripped.lower())
+        return cls.KNOWN.get(key, stripped)

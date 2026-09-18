@@ -69,6 +69,10 @@ def parse_junit_xml(
             if system is not None:
                 message = message or _normalize_message(system.text)
 
+            result_metadata = _metadata_with_tags(
+                metadata, _tags_from_testcase(testcase)
+            )
+
             # Build test name
             name_components = []
             for value in [root_name, suite_name, class_name, test_name]:
@@ -95,7 +99,7 @@ def parse_junit_xml(
                     "status": status,
                     "duration": duration,
                     "message": message,
-                    "metadata": metadata,
+                    "metadata": result_metadata,
                 }
                 tests_data_to_create.append(test_data)
                 results_data_to_create.append(result_data)
@@ -132,7 +136,7 @@ def parse_junit_xml(
                     status=status,
                     duration=duration,
                     message=message,
-                    metadata=metadata,
+                    metadata=result_metadata,
                 )
                 log.info(f"Created result: {result}")
                 results.append(result)
@@ -253,6 +257,48 @@ def update_status(
                 raise e from None
         else:
             log.error(f"Unable to update status for {project.path} @ {sha[:7]}: {e}")
+
+
+def _tags_from_testcase(testcase: ET.Element) -> list[str]:
+    properties = testcase.find("properties")
+    if properties is None:
+        return []
+
+    tags: list[str] = []
+    seen: set[str] = set()
+    for prop in properties.findall("property"):
+        name = (prop.get("name") or "").strip().lower()
+        if name not in {"tag", "tags"}:
+            continue
+        value = (prop.get("value") or "").strip()
+        if not value:
+            continue
+        parts = (
+            [part.strip() for part in value.split(",") if part.strip()]
+            if name == "tags"
+            else [value]
+        )
+        for part in parts:
+            if part not in seen:
+                seen.add(part)
+                tags.append(part)
+    return tags
+
+
+def _metadata_with_tags(metadata: dict, tags: list[str]) -> dict:
+    if not tags:
+        return metadata
+    result_metadata = dict(metadata)
+    existing = result_metadata.get("tags", [])
+    if isinstance(existing, str):
+        existing = [existing] if existing else []
+    else:
+        existing = list(existing)
+    for tag in tags:
+        if tag not in existing:
+            existing.append(tag)
+    result_metadata["tags"] = existing
+    return result_metadata
 
 
 def _normalize_message(message: str | None) -> str | None:
