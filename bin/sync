@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo "error: working tree is dirty; commit or stash first" >&2
+  exit 1
+fi
+
+git fetch origin
+git fetch upstream
+
+git checkout main
+if ! git merge --ff-only upstream/main; then
+  echo "error: main could not fast-forward to upstream/main" >&2
+  exit 1
+fi
+git push origin main
+
+git checkout custom
+if ! git rebase main; then
+  echo "error: rebase failed; resolve conflicts, then:" >&2
+  echo "  git add …" >&2
+  echo "  git rebase --continue" >&2
+  echo "  git push --force-with-lease origin custom" >&2
+  exit 1
+fi
+
+git push --force-with-lease origin custom
+echo "main synced from upstream; custom rebased and pushed"
